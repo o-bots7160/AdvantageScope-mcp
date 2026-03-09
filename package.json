@@ -1,0 +1,41 @@
+{
+  "name": "@o-bots7160/advantagescope-mcp",
+  "version": "0.1.0",
+  "description": "MCP server for creating and editing AdvantageScope configuration JSON files",
+  "main": "dist/index.js",
+  "bin": {
+    "advantagescope-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepare": "npm run build",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [
+    "mcp",
+    "frc",
+    "advantagescope",
+    "networktables"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/o-bots7160/advantagescope-mcp.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "typescript": "^5.9.3",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.5",
+    "vitest": "^4.0.18"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "servers": {
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@anthropic/mcp-filesystem-server",
+        "${workspaceFolder}"
+      ]
+    }
+  }
+}
