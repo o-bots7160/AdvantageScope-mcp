@@ -69,7 +69,7 @@ Key conventions:
 - Return JSON as formatted text content (`JSON.stringify(result, null, 2)`)
 - Tool names use `snake_case`
 
-### Implemented Tools (14 total)
+### Implemented Tools (15 total)
 
 **Read/Inspect:**
 - `list_assets` — List AdvantageScope custom asset directories within a base directory, optionally filtered by type
@@ -77,6 +77,7 @@ Key conventions:
 - `validate_asset_config` — Validate an asset config.json against its Zod schema
 - `list_tab_types` — List all AdvantageScope tab types with numeric IDs
 - `get_layout` — Read an AdvantageScope layout state JSON file and return a summary of hubs and tabs
+- `get_tab` — Get full details of a specific tab including controller and renderer config
 - `get_preferences` — Read AdvantageScope preferences from a prefs.json file (returns defaults for missing fields)
 
 **Create:**

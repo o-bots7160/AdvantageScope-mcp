@@ -379,6 +379,56 @@ export function createServer(): McpServer {
   );
 
   server.tool(
+    "get_tab",
+    "Get full details of a specific tab in an AdvantageScope layout, including controller and renderer config",
+    {
+      file_path: z.string().describe("Path to the AdvantageScope state JSON file"),
+      hub_index: z.number().int().min(0).optional().describe("Hub (window) index (default: 0)"),
+      tab_index: z.number().int().min(0).describe("Tab index within the hub"),
+    },
+    async ({ file_path, hub_index, tab_index }) => {
+      try {
+        const layout = readLayout(file_path);
+        const hi = hub_index ?? 0;
+        if (hi >= layout.hubs.length) {
+          return {
+            content: [{ type: "text" as const, text: `Error: hub index ${hi} out of range (${layout.hubs.length} hubs)` }],
+            isError: true,
+          };
+        }
+        const hub = layout.hubs[hi];
+        if (tab_index >= hub.state.tabs.tabs.length) {
+          return {
+            content: [{ type: "text" as const, text: `Error: tab index ${tab_index} out of range (${hub.state.tabs.tabs.length} tabs in hub ${hi})` }],
+            isError: true,
+          };
+        }
+        const tab = hub.state.tabs.tabs[tab_index];
+        const result = {
+          hub: hi,
+          index: tab_index,
+          type: tab.type,
+          typeName: TAB_TYPE_NAMES[tab.type as TabType] ?? `Unknown(${tab.type})`,
+          title: tab.title,
+          selected: tab_index === hub.state.tabs.selected,
+          controllerUUID: tab.controllerUUID,
+          controlsHeight: tab.controlsHeight,
+          controller: tab.controller,
+          renderer: tab.renderer,
+        };
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
+        };
+      } catch (e) {
+        return {
+          content: [{ type: "text" as const, text: `Error: ${(e as Error).message}` }],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  server.tool(
     "create_layout",
     "Create a new AdvantageScope layout/state JSON file with a default window and Documentation tab",
     {

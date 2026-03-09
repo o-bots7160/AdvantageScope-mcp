@@ -52,6 +52,7 @@ Add to your `.vscode/mcp.json`:
 - **`validate_asset_config`** — Validate an asset config.json against its schema
 - **`list_tab_types`** — List all AdvantageScope tab types with numeric IDs
 - **`get_layout`** — Read a layout state JSON file and get a summary of hubs and tabs
+- **`get_tab`** — Get full details of a specific tab including controller and renderer config
 - **`get_preferences`** — Read AdvantageScope preferences (returns defaults for missing fields)
 
 ### Create
