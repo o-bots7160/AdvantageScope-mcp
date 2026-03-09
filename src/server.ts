@@ -138,15 +138,145 @@ export function createServer(): McpServer {
 
   server.tool(
     "list_tab_types",
-    "List all available AdvantageScope tab types with their numeric IDs",
+    "List all available AdvantageScope tab types with their numeric IDs, supported data types, controller state format, and visualization options",
     {},
     async () => {
-      const types = Object.entries(TAB_TYPE_NAMES).map(([id, name]) => ({
-        id: Number(id),
-        name,
-      }));
+      const tabTypeInfo = [
+        {
+          id: 0, name: "Documentation",
+          controllerType: "null",
+          description: "Static documentation/welcome tab",
+          dataTypes: [],
+          visualizationTypes: [],
+        },
+        {
+          id: 1, name: "Line Graph",
+          controllerType: "SourceListState",
+          description: "Time-series line charts for numeric and discrete data",
+          dataTypes: ["Number", "Raw", "Boolean", "String", "BooleanArray", "NumberArray", "StringArray", "Alerts"],
+          visualizationTypes: [
+            { type: "stepped", description: "Stepped line", sources: ["Number"], options: { color: "GraphColors", size: "normal|bold|verybold" } },
+            { type: "smooth", description: "Smooth interpolated line", sources: ["Number"], options: { color: "GraphColors", size: "normal|bold|verybold" } },
+            { type: "points", description: "Points only", sources: ["Number"], options: { color: "GraphColors", size: "normal|bold" } },
+            { type: "stripes", description: "Discrete stripes", sources: ["Raw", "Boolean", "Number", "String", "BooleanArray", "NumberArray", "StringArray"], options: { color: "GraphColors" } },
+            { type: "graph", description: "Discrete graph", sources: ["Raw", "Boolean", "Number", "String", "BooleanArray", "NumberArray", "StringArray"], options: { color: "GraphColors" } },
+            { type: "alerts", description: "Alert display", sources: ["Alerts"], options: {} },
+          ],
+        },
+        {
+          id: 2, name: "2D Field",
+          controllerType: "SourceListState",
+          description: "2D field visualization with robot poses, trajectories, and heatmaps",
+          dataTypes: ["Pose2d", "Pose3d", "Transform2d", "Transform3d", "Translation2d", "Translation3d", "Rotation2d", "Rotation3d", "SwerveModuleState[]", "Trajectory", "DifferentialSample[]", "SwerveSample[]"],
+          visualizationTypes: [
+            { type: "robot", description: "Robot pose", sources: ["Pose2d", "Pose3d", "Pose2d[]", "Pose3d[]", "Transform2d", "Transform3d"], options: { bumpers: "alliance color or NeonColors" } },
+            { type: "ghost", description: "Ghost pose overlay", sources: ["Pose2d", "Pose3d", "Pose2d[]", "Pose3d[]"], options: { color: "NeonColors" } },
+            { type: "vision", description: "Vision target (child of robot)", sources: ["Pose2d", "Pose3d", "Translation2d", "Translation3d"], options: { color: "NeonColors", size: "normal|bold" } },
+            { type: "trajectory", description: "Path visualization", sources: ["Pose2d[]", "Trajectory", "DifferentialSample[]", "SwerveSample[]"], options: { color: "NeonColors", size: "normal|bold" } },
+            { type: "heatmap", description: "Position heatmap", sources: ["Pose2d", "Pose3d", "Translation2d", "Translation3d"], options: { timeRange: "enabled|auto|teleop|teleop-no-endgame|full|visible" } },
+            { type: "arrow", description: "Direction arrow", sources: ["Pose2d", "Pose3d", "Trajectory"], options: { position: "center|back|front" } },
+            { type: "swerveStates", description: "Swerve module vectors (child of robot)", sources: ["SwerveModuleState[]"], options: { color: "NeonColors", arrangement: "FL/FR/BL/BR permutations" } },
+            { type: "rotationOverride", description: "Rotation override (child of robot)", sources: ["Rotation2d", "Rotation3d"], options: {} },
+          ],
+        },
+        {
+          id: 3, name: "3D Field",
+          controllerType: "SourceListState",
+          description: "3D field visualization with CAD models, game pieces, and articulated robots",
+          dataTypes: ["Pose2d", "Pose3d", "Transform2d", "Transform3d", "Translation2d", "Translation3d", "Rotation2d", "Rotation3d", "SwerveModuleState[]", "Mechanism2d", "Trajectory"],
+          visualizationTypes: [
+            { type: "robot", description: "Robot pose", sources: ["Pose2d", "Pose3d"], options: { bumpers: "alliance color or NeonColors" } },
+            { type: "ghost", description: "Ghost pose overlay", sources: ["Pose2d", "Pose3d"], options: { color: "NeonColors" } },
+            { type: "component", description: "Articulated 3D component (child of robot)", sources: ["Pose3d", "Pose3d[]"], options: {} },
+            { type: "mechanism", description: "2D mechanism projection (child of robot)", sources: ["Mechanism2d"], options: { orientation: "XZ|YZ" } },
+            { type: "cone", description: "Game piece - cone (2023)", sources: ["Pose3d", "Translation3d"], options: {} },
+            { type: "cube", description: "Game piece - cube (2023)", sources: ["Pose3d", "Translation3d"], options: {} },
+            { type: "note", description: "Game piece - note (2024)", sources: ["Pose3d", "Translation3d"], options: {} },
+            { type: "axes", description: "Coordinate axes", sources: ["Pose2d", "Pose3d"], options: {} },
+            { type: "cameraOverride", description: "Camera position override", sources: ["Pose2d", "Pose3d"], options: {} },
+          ],
+        },
+        {
+          id: 4, name: "Table",
+          controllerType: "string[]",
+          description: "Tabular view of value changes over time. Controller is an array of log field keys.",
+          dataTypes: ["all types supported"],
+          visualizationTypes: [],
+        },
+        {
+          id: 5, name: "Console",
+          controllerType: "string | null",
+          description: "Console message viewer with warning/error highlighting. Controller is a single log field key.",
+          dataTypes: ["String"],
+          visualizationTypes: [],
+        },
+        {
+          id: 6, name: "Statistics",
+          controllerType: "SourceListState",
+          description: "Statistical analysis with histograms (mean, median, std dev, percentiles)",
+          dataTypes: ["Number"],
+          visualizationTypes: [
+            { type: "independent", description: "Independent measurement", sources: ["Number"], options: { color: "GraphColors" } },
+            { type: "reference", description: "Reference measurement (parent)", sources: ["Number"], options: {} },
+            { type: "relativeError", description: "Relative error (child of reference)", sources: ["Number"], options: { color: "GraphColors" } },
+            { type: "absoluteError", description: "Absolute error (child of reference)", sources: ["Number"], options: { color: "GraphColors" } },
+          ],
+        },
+        {
+          id: 7, name: "Video",
+          controllerType: "object",
+          description: "Synchronized match video playback (local file, YouTube, or The Blue Alliance)",
+          dataTypes: [],
+          visualizationTypes: [],
+        },
+        {
+          id: 8, name: "Joysticks",
+          controllerType: "string[]",
+          description: "Display up to 6 controller states. Controller is an array of 6 joystick layout names.",
+          dataTypes: ["Joystick data (from WPILib/AdvantageKit logs)"],
+          visualizationTypes: [],
+        },
+        {
+          id: 9, name: "Swerve",
+          controllerType: "SourceListState",
+          description: "Swerve drive module vector display with velocity and rotation visualization",
+          dataTypes: ["SwerveModuleState[]", "ChassisSpeeds", "Rotation2d", "Rotation3d"],
+          visualizationTypes: [
+            { type: "states", description: "Module states (velocity vectors)", sources: ["SwerveModuleState[]"], options: { color: "NeonColors", arrangement: "FL/FR/BL/BR|FR/FL/BR/BL|etc." } },
+            { type: "chassisSpeeds", description: "Chassis speeds vector", sources: ["ChassisSpeeds"], options: { color: "NeonColors" } },
+            { type: "rotation", description: "Robot rotation indicator", sources: ["Rotation2d", "Rotation3d"], options: {} },
+          ],
+        },
+        {
+          id: 10, name: "Mechanism",
+          controllerType: "SourceListState",
+          description: "WPILib Mechanism2d visualization (jointed mechanisms like arms, elevators)",
+          dataTypes: ["Mechanism2d"],
+          visualizationTypes: [
+            { type: "mechanism", description: "Mechanism2d field", sources: ["Mechanism2d"], options: {} },
+          ],
+        },
+        {
+          id: 11, name: "Points",
+          controllerType: "SourceListState",
+          description: "2D scatter plot visualization for arbitrary point data",
+          dataTypes: ["Translation2d", "Translation2d[]", "NumberArray"],
+          visualizationTypes: [
+            { type: "plus", description: "Plus marker", sources: ["Translation2d", "Translation2d[]", "NumberArray"], options: { size: "small|medium|large", groupSize: "0-9" } },
+            { type: "cross", description: "Cross marker", sources: ["Translation2d", "Translation2d[]", "NumberArray"], options: { size: "small|medium|large", groupSize: "0-9" } },
+            { type: "circle", description: "Circle marker", sources: ["Translation2d", "Translation2d[]", "NumberArray"], options: { size: "small|medium|large", groupSize: "0-9" } },
+          ],
+        },
+        {
+          id: 12, name: "Metadata",
+          controllerType: "null",
+          description: "Display log metadata key-value pairs. Supports side-by-side real vs replay comparison.",
+          dataTypes: ["String metadata (/Metadata table or Logger.recordMetadata)"],
+          visualizationTypes: [],
+        },
+      ];
       return {
-        content: [{ type: "text" as const, text: JSON.stringify(types, null, 2) }],
+        content: [{ type: "text" as const, text: JSON.stringify(tabTypeInfo, null, 2) }],
       };
     },
   );
