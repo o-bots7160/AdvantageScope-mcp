@@ -1,0 +1,144 @@
+{
+  "hubs": [
+    {
+      "x": 0,
+      "y": 0,
+      "width": 1600,
+      "height": 900,
+      "state": {
+        "sidebar": {
+          "width": 200,
+          "expanded": ["/SmartDashboard", "/RealOutputs"]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "Documentation",
+              "controller": null,
+              "controllerUUID": "doc00000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 0
+            },
+            {
+              "type": 1,
+              "title": "Drive Telemetry",
+              "controller": {
+                "leftSources": [
+                  {
+                    "type": "smooth",
+                    "logKey": "/RealOutputs/DriveTrain/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#2b66a2",
+                      "thickness": "normal"
+                    },
+                    "children": []
+                  },
+                  {
+                    "type": "smooth",
+                    "logKey": "/RealOutputs/DriveTrain/RightVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#af2437",
+                      "thickness": "normal"
+                    },
+                    "children": []
+                  }
+                ],
+                "rightSources": [],
+                "discreteSources": []
+              },
+              "controllerUUID": "lg100000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 50
+            },
+            {
+              "type": 2,
+              "title": "Field View",
+              "controller": {
+                "sources": [
+                  {
+                    "type": "robot",
+                    "logKey": "/RealOutputs/Odometry/Pose",
+                    "logType": "Pose2d",
+                    "visible": true,
+                    "options": {
+                      "color": "#00ff00",
+                      "size": "normal"
+                    },
+                    "children": []
+                  }
+                ]
+              },
+              "controllerUUID": "f2d00000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 50
+            },
+            {
+              "type": 4,
+              "title": "Key Values",
+              "controller": ["/SmartDashboard/AutoMode", "/SmartDashboard/BatteryVoltage"],
+              "controllerUUID": "tbl00000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 0
+            },
+            {
+              "type": 9,
+              "title": "Swerve Drive",
+              "controller": {
+                "sources": [
+                  {
+                    "type": "states",
+                    "logKey": "/RealOutputs/SwerveModuleStates/Measured",
+                    "logType": "SwerveModuleState[]",
+                    "visible": true,
+                    "options": {
+                      "color": "#00ff00",
+                      "arrangement": "0,1,2,3"
+                    },
+                    "children": []
+                  }
+                ]
+              },
+              "controllerUUID": "swv00000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 50
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "satellites": [
+    {
+      "uuid": "sat-example-00000000000000000",
+      "x": 1620,
+      "y": 0,
+      "width": 640,
+      "height": 480,
+      "state": {
+        "sidebar": {
+          "width": 160,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 0,
+          "tabs": [
+            {
+              "type": 5,
+              "title": "Console",
+              "controller": "/SmartDashboard/Console",
+              "controllerUUID": "con00000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 0
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

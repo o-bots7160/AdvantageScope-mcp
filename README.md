@@ -70,15 +70,18 @@ Add to your `.vscode/mcp.json`:
 
 - **`update_asset_config`** — Merge updates into an existing asset config.json with validation
 - **`update_preferences`** — Update AdvantageScope preferences (merges with existing)
-- **`update_tab`** — Update an existing tab's title, controller, and/or renderer config
+- **`update_tab`** — Update an existing tab's title, controller, and/or renderer config (objects are shallow-merged; arrays/null are replaced)
 - **`add_tab`** — Add a tab to an existing layout by type ID with optional controller/renderer config
+- **`add_hub`** — Add a new hub (window) to a layout with optional position and size
 - **`add_source`** — Add a validated data source to a SourceListState tab (LineGraph, Field2d/3d, Statistics, Swerve, Mechanism, Points)
 - **`update_source`** — Update an existing source in a SourceListState tab by index
 - **`remove_source`** — Remove a source from a SourceListState tab by index
 
 ### Delete
 
+- **`delete_asset`** — Delete an AdvantageScope custom asset directory and all its contents
 - **`remove_tab`** — Remove a tab from a layout by index
+- **`remove_hub`** — Remove a hub (window) from a layout by index (cannot remove the last hub)
 
 ## Development
 

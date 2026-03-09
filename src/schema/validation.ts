@@ -7,6 +7,8 @@ import type {
   ApplicationState,
   Preferences,
 } from "./types.js";
+import { TabType } from "./types.js";
+import { SOURCE_LIST_TAB_TYPES } from "./source-types.js";
 import {
   Config2dFieldSchema,
   Config3dFieldSchema,
@@ -84,3 +86,59 @@ export function validatePreferences(prefs: unknown): ValidationError[] {
   if (result.success) return [];
   return zodErrorsToValidationErrors(result.error, "Preferences");
 }
+
+export function validateTabController(tabType: number, controller: unknown): ValidationError[] {
+  // null is always acceptable (uninitialized state)
+  if (controller === null) {
+    return [];
+  }
+
+  // Documentation and Metadata should have null controllers
+  if (tabType === TabType.Documentation || tabType === TabType.Metadata) {
+    return [{ path: "controller", message: "Controller should be null for this tab type" }];
+  }
+
+  // Table and Joysticks use string arrays
+  if (tabType === TabType.Table || tabType === TabType.Joysticks) {
+    if (!Array.isArray(controller) || !controller.every((item) => typeof item === "string")) {
+      return [{ path: "controller", message: "Controller must be a string array for this tab type" }];
+    }
+    return [];
+  }
+
+  // Console uses string or null
+  if (tabType === TabType.Console) {
+    if (typeof controller !== "string") {
+      return [{ path: "controller", message: "Controller must be a string or null for Console tab" }];
+    }
+    return [];
+  }
+
+  // Video uses object (non-array)
+  if (tabType === TabType.Video) {
+    if (typeof controller !== "object" || Array.isArray(controller)) {
+      return [{ path: "controller", message: "Controller must be an object for Video tab" }];
+    }
+    return [];
+  }
+
+  // Mechanism uses array
+  if (tabType === TabType.Mechanism) {
+    if (!Array.isArray(controller)) {
+      return [{ path: "controller", message: "Controller must be an array for Mechanism tab" }];
+    }
+    return [];
+  }
+
+  // SourceListState tabs (LineGraph, Field2d, Field3d, Statistics, Swerve, Points)
+  if (SOURCE_LIST_TAB_TYPES.has(tabType)) {
+    if (typeof controller !== "object" || Array.isArray(controller)) {
+      return [{ path: "controller", message: "Controller must be an object (SourceListState) for this tab type" }];
+    }
+    return [];
+  }
+
+  return [];
+}
+
+

@@ -192,10 +192,15 @@ export interface WindowState {
   state: HubState;
 }
 
+// Satellite window state (window with unique identifier)
+export interface SatelliteWindowState extends WindowState {
+  uuid: string;
+}
+
 // Root application state (layout file)
 export interface ApplicationState {
   hubs: WindowState[];
-  satellites: WindowState[];
+  satellites: SatelliteWindowState[];
 }
 
 // AdvantageScope preferences
@@ -243,6 +248,20 @@ export const DEFAULT_PREFERENCES: Preferences = {
   skipFrcLogFolderDefault: false,
   ctreLicenseAccepted: false,
 };
+
+// Line graph filter modes
+export enum LineGraphFilter {
+  None = 0,
+  Differentiate = 1,
+  Integrate = 2,
+}
+
+// Video source types
+export enum VideoSource {
+  Local = 0,
+  YouTube = 1,
+  TheBlueAlliance = 2,
+}
 
 // Asset type identifiers
 export type AssetType = "Field2d" | "Field3d" | "Robot" | "Joystick";

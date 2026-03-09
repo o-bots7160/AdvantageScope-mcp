@@ -1,3 +1,5 @@
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import {
@@ -6,12 +8,14 @@ import {
   inferAssetType,
   listAssetDirs,
   assetConfigPath,
+  deleteAssetDir,
 } from "./tools/assets.js";
 import {
   readLayout,
   writeLayout,
   createEmptyLayout,
   createTab,
+  createDefaultHubState,
   readPreferences,
   writePreferences,
 } from "./tools/layout.js";
@@ -730,6 +734,47 @@ export function createServer(): McpServer {
     },
   );
 
+  // ─── DELETE TOOLS ────────────────────────────────────────────────
+
+  server.tool(
+    "delete_asset",
+    "Delete an AdvantageScope custom asset directory and all its contents (config.json, images, models)",
+    {
+      asset_dir: z.string().describe("Path to the asset directory to delete (e.g., '/path/to/assets/Field2d_MyField')"),
+    },
+    async ({ asset_dir }) => {
+      try {
+        const configPath = path.join(asset_dir, "config.json");
+        if (!fs.existsSync(configPath)) {
+          return {
+            content: [{ type: "text" as const, text: `Error: No config.json found in ${asset_dir}. Ensure this is a valid asset directory.` }],
+            isError: true,
+          };
+        }
+        const config = readAssetConfig(configPath);
+        const assetType = inferAssetType(configPath);
+        deleteAssetDir(asset_dir);
+        return {
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify({
+              deleted: {
+                directory: asset_dir,
+                type: assetType,
+                name: (config as unknown as Record<string, unknown>).name ?? "unknown",
+              },
+            }, null, 2),
+          }],
+        };
+      } catch (e) {
+        return {
+          content: [{ type: "text" as const, text: `Error: ${(e as Error).message}` }],
+          isError: true,
+        };
+      }
+    },
+  );
+
   // ─── LAYOUT TOOLS ─────────────────────────────────────────────────
 
   server.tool(
@@ -851,8 +896,8 @@ export function createServer(): McpServer {
       hub_index: z.number().int().min(0).optional().describe("Hub (window) index to add the tab to (default: 0)"),
       tab_type: z.number().int().min(0).max(12).describe("Tab type ID (0=Documentation, 1=LineGraph, 2=Field2d, 3=Field3d, 4=Table, 5=Console, 6=Statistics, 7=Video, 8=Joysticks, 9=Swerve, 10=Mechanism, 11=Points, 12=Metadata)"),
       title: z.string().optional().describe("Tab title (defaults to tab type name)"),
-      controller: z.record(z.string(), z.unknown()).optional().describe("Tab-specific controller configuration object"),
-      renderer: z.record(z.string(), z.unknown()).optional().describe("Tab-specific renderer configuration object"),
+      controller: z.unknown().optional().describe("Tab-specific controller configuration (object or array)"),
+      renderer: z.unknown().optional().describe("Tab-specific renderer configuration (object or array)"),
     },
     async ({ file_path, hub_index, tab_type, title, controller, renderer }) => {
       try {
@@ -895,14 +940,14 @@ export function createServer(): McpServer {
 
   server.tool(
     "update_tab",
-    "Update properties of an existing tab in an AdvantageScope layout (title, controller, renderer). Controller and renderer objects are shallow-merged with existing values.",
+    "Update properties of an existing tab in an AdvantageScope layout (title, controller, renderer). Object-type controllers/renderers are shallow-merged with existing values; array or null controllers are replaced entirely.",
     {
       file_path: z.string().describe("Path to the layout state JSON file"),
       hub_index: z.number().int().min(0).optional().describe("Hub (window) index (default: 0)"),
       tab_index: z.number().int().min(0).describe("Tab index to update"),
       title: z.string().optional().describe("New tab title"),
-      controller: z.record(z.string(), z.unknown()).optional().describe("Controller properties to merge into existing controller config"),
-      renderer: z.record(z.string(), z.unknown()).optional().describe("Renderer properties to merge into existing renderer config"),
+      controller: z.unknown().optional().describe("Controller properties to merge into existing controller config (objects are shallow-merged; arrays/null are replaced)"),
+      renderer: z.unknown().optional().describe("Renderer properties to merge into existing renderer config (objects are shallow-merged; arrays/null are replaced)"),
     },
     async ({ file_path, hub_index, tab_index, title, controller, renderer }) => {
       try {
@@ -924,14 +969,32 @@ export function createServer(): McpServer {
         const tab = tabs.tabs[tab_index];
         if (title !== undefined) tab.title = title;
         if (controller !== undefined) {
-          tab.controller = tab.controller && typeof tab.controller === "object" && !Array.isArray(tab.controller)
-            ? { ...(tab.controller as Record<string, unknown>), ...controller }
-            : controller;
+          if (
+            tab.controller != null &&
+            typeof tab.controller === "object" &&
+            !Array.isArray(tab.controller) &&
+            typeof controller === "object" &&
+            controller !== null &&
+            !Array.isArray(controller)
+          ) {
+            tab.controller = { ...(tab.controller as Record<string, unknown>), ...(controller as Record<string, unknown>) };
+          } else {
+            tab.controller = controller;
+          }
         }
         if (renderer !== undefined) {
-          tab.renderer = tab.renderer && typeof tab.renderer === "object" && !Array.isArray(tab.renderer)
-            ? { ...(tab.renderer as Record<string, unknown>), ...renderer }
-            : renderer;
+          if (
+            tab.renderer != null &&
+            typeof tab.renderer === "object" &&
+            !Array.isArray(tab.renderer) &&
+            typeof renderer === "object" &&
+            renderer !== null &&
+            !Array.isArray(renderer)
+          ) {
+            tab.renderer = { ...(tab.renderer as Record<string, unknown>), ...(renderer as Record<string, unknown>) };
+          } else {
+            tab.renderer = renderer;
+          }
         }
         writeLayout(file_path, layout);
         const result = {
@@ -999,6 +1062,99 @@ export function createServer(): McpServer {
                 title: removed.title,
               },
               remainingTabs: tabs.tabs.length,
+            }, null, 2),
+          }],
+        };
+      } catch (e) {
+        return {
+          content: [{ type: "text" as const, text: `Error: ${(e as Error).message}` }],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  // ─── HUB MANAGEMENT TOOLS ──────────────────────────────────────────
+
+  server.tool(
+    "add_hub",
+    "Add a new hub (window) to an AdvantageScope layout with optional position and size",
+    {
+      file_path: z.string().describe("Path to the layout state JSON file"),
+      x: z.number().optional().describe("Window x position (default: 0)"),
+      y: z.number().optional().describe("Window y position (default: 0)"),
+      width: z.number().positive().optional().describe("Window width in pixels (default: 1280)"),
+      height: z.number().positive().optional().describe("Window height in pixels (default: 720)"),
+    },
+    async ({ file_path, x, y, width, height }) => {
+      try {
+        const layout = readLayout(file_path);
+        const hub = {
+          x: x ?? 0,
+          y: y ?? 0,
+          width: width ?? 1280,
+          height: height ?? 720,
+          state: createDefaultHubState(),
+        };
+        layout.hubs.push(hub);
+        writeLayout(file_path, layout);
+        return {
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify({
+              added: {
+                hubIndex: layout.hubs.length - 1,
+                x: hub.x,
+                y: hub.y,
+                width: hub.width,
+                height: hub.height,
+                tabs: hub.state.tabs.tabs.length,
+              },
+            }, null, 2),
+          }],
+        };
+      } catch (e) {
+        return {
+          content: [{ type: "text" as const, text: `Error: ${(e as Error).message}` }],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  server.tool(
+    "remove_hub",
+    "Remove a hub (window) from an AdvantageScope layout by index. Cannot remove the last hub.",
+    {
+      file_path: z.string().describe("Path to the layout state JSON file"),
+      hub_index: z.number().int().min(0).describe("Index of the hub to remove"),
+    },
+    async ({ file_path, hub_index }) => {
+      try {
+        const layout = readLayout(file_path);
+        if (layout.hubs.length <= 1) {
+          return {
+            content: [{ type: "text" as const, text: "Error: Cannot remove the last hub. A layout must have at least one hub." }],
+            isError: true,
+          };
+        }
+        if (hub_index >= layout.hubs.length) {
+          return {
+            content: [{ type: "text" as const, text: `Error: Hub index ${hub_index} out of range (${layout.hubs.length} hubs)` }],
+            isError: true,
+          };
+        }
+        const [removed] = layout.hubs.splice(hub_index, 1);
+        writeLayout(file_path, layout);
+        return {
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify({
+              removed: {
+                hubIndex: hub_index,
+                tabs: removed.state.tabs.tabs.length,
+                remainingHubs: layout.hubs.length,
+              },
             }, null, 2),
           }],
         };

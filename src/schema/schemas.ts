@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { LineGraphFilter, VideoSource } from "./types.js";
 
 // Shared schemas
 export const Config3dRotationSchema = z.object({
@@ -182,7 +183,15 @@ export const WindowStateSchema = z.object({
   state: HubStateSchema,
 });
 
+export const SatelliteWindowStateSchema = WindowStateSchema.extend({
+  uuid: z.string().describe("Unique identifier for the satellite window"),
+});
+
 export const ApplicationStateSchema = z.object({
   hubs: z.array(WindowStateSchema),
-  satellites: z.array(WindowStateSchema),
+  satellites: z.array(SatelliteWindowStateSchema),
 });
+
+// Utility type schemas
+export const LineGraphFilterSchema = z.nativeEnum(LineGraphFilter);
+export const VideoSourceSchema = z.nativeEnum(VideoSource);

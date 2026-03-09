@@ -72,3 +72,7 @@ export function listAssetDirs(
   }
   return results;
 }
+
+export function deleteAssetDir(dirPath: string): void {
+  fs.rmSync(dirPath, { recursive: true, force: true });
+}
