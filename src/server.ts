@@ -1074,6 +1074,158 @@ export function createServer(): McpServer {
     },
   );
 
+  server.tool(
+    "move_tab",
+    "Move a tab from one position to another within a hub, preserving all tab configuration (controller, renderer, sources)",
+    {
+      file_path: z.string().describe("Path to the layout state JSON file"),
+      hub_index: z.number().int().min(0).optional().describe("Hub (window) index (default: 0)"),
+      from_index: z.number().int().min(0).describe("Current tab index to move"),
+      to_index: z.number().int().min(0).describe("Target tab index to move to"),
+    },
+    async ({ file_path, hub_index, from_index, to_index }) => {
+      try {
+        const layout = readLayout(file_path);
+        const hi = hub_index ?? 0;
+        if (hi >= layout.hubs.length) {
+          return {
+            content: [{ type: "text" as const, text: `Error: hub index ${hi} out of range (${layout.hubs.length} hubs)` }],
+            isError: true,
+          };
+        }
+        const tabs = layout.hubs[hi].state.tabs;
+        const count = tabs.tabs.length;
+        if (from_index >= count) {
+          return {
+            content: [{ type: "text" as const, text: `Error: from_index ${from_index} out of range (${count} tabs in hub ${hi})` }],
+            isError: true,
+          };
+        }
+        if (to_index >= count) {
+          return {
+            content: [{ type: "text" as const, text: `Error: to_index ${to_index} out of range (${count} tabs in hub ${hi})` }],
+            isError: true,
+          };
+        }
+        if (from_index === to_index) {
+          const tab = tabs.tabs[from_index];
+          return {
+            content: [{
+              type: "text" as const,
+              text: JSON.stringify({
+                moved: {
+                  hub: hi,
+                  from: from_index,
+                  to: to_index,
+                  title: tab.title,
+                },
+                message: "No change needed (same position)",
+              }, null, 2),
+            }],
+          };
+        }
+        // Remove the tab from its current position
+        const [moved] = tabs.tabs.splice(from_index, 1);
+        // Insert at the target position
+        tabs.tabs.splice(to_index, 0, moved);
+        // Adjust selected tab index to follow the previously selected tab
+        const sel = tabs.selected;
+        if (sel === from_index) {
+          tabs.selected = to_index;
+        } else if (from_index < sel && to_index >= sel) {
+          tabs.selected = sel - 1;
+        } else if (from_index > sel && to_index <= sel) {
+          tabs.selected = sel + 1;
+        }
+        writeLayout(file_path, layout);
+        return {
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify({
+              moved: {
+                hub: hi,
+                from: from_index,
+                to: to_index,
+                type: moved.type,
+                typeName: TAB_TYPE_NAMES[moved.type as TabType] ?? `Unknown(${moved.type})`,
+                title: moved.title,
+              },
+              tabs: tabs.tabs.map((t, i) => ({ index: i, title: t.title, typeName: TAB_TYPE_NAMES[t.type as TabType] ?? `Unknown(${t.type})` })),
+            }, null, 2),
+          }],
+        };
+      } catch (e) {
+        return {
+          content: [{ type: "text" as const, text: `Error: ${(e as Error).message}` }],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  server.tool(
+    "reorder_tabs",
+    "Reorder all tabs in a hub by specifying the new index order. Preserves all tab configuration. Example: order [2,0,1] moves tab 2 to first, tab 0 to second, tab 1 to third.",
+    {
+      file_path: z.string().describe("Path to the layout state JSON file"),
+      hub_index: z.number().int().min(0).optional().describe("Hub (window) index (default: 0)"),
+      order: z.array(z.number().int().min(0)).describe("New tab order as an array of current tab indices, e.g. [2,0,1,3] to move tab 2 first"),
+    },
+    async ({ file_path, hub_index, order }) => {
+      try {
+        const layout = readLayout(file_path);
+        const hi = hub_index ?? 0;
+        if (hi >= layout.hubs.length) {
+          return {
+            content: [{ type: "text" as const, text: `Error: hub index ${hi} out of range (${layout.hubs.length} hubs)` }],
+            isError: true,
+          };
+        }
+        const tabs = layout.hubs[hi].state.tabs;
+        const count = tabs.tabs.length;
+        if (order.length !== count) {
+          return {
+            content: [{ type: "text" as const, text: `Error: order array length (${order.length}) must match tab count (${count})` }],
+            isError: true,
+          };
+        }
+        const sorted = [...order].sort((a, b) => a - b);
+        for (let i = 0; i < count; i++) {
+          if (sorted[i] !== i) {
+            return {
+              content: [{ type: "text" as const, text: `Error: order must contain each index 0..${count - 1} exactly once, got [${order.join(",")}]` }],
+              isError: true,
+            };
+          }
+        }
+        // Build the reordered tab array
+        const oldTabs = tabs.tabs;
+        tabs.tabs = order.map(i => oldTabs[i]);
+        // Update selected to follow the previously selected tab
+        const newSelected = order.indexOf(tabs.selected);
+        tabs.selected = newSelected >= 0 ? newSelected : 0;
+        writeLayout(file_path, layout);
+        return {
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify({
+              reordered: {
+                hub: hi,
+                order,
+              },
+              tabs: tabs.tabs.map((t, i) => ({ index: i, title: t.title, typeName: TAB_TYPE_NAMES[t.type as TabType] ?? `Unknown(${t.type})` })),
+            }, null, 2),
+          }],
+        };
+      } catch (e) {
+        return {
+          content: [{ type: "text" as const, text: `Error: ${(e as Error).message}` }],
+          isError: true,
+        };
+      }
+    },
+  );
+
   // ─── HUB MANAGEMENT TOOLS ──────────────────────────────────────────
 
   server.tool(

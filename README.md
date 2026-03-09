@@ -76,6 +76,8 @@ Add to your `.vscode/mcp.json`:
 - **`add_source`** — Add a validated data source to a SourceListState tab (LineGraph, Field2d/3d, Statistics, Swerve, Mechanism, Points)
 - **`update_source`** — Update an existing source in a SourceListState tab by index
 - **`remove_source`** — Remove a source from a SourceListState tab by index
+- **`move_tab`** — Move a tab from one position to another within a hub, preserving all config
+- **`reorder_tabs`** — Reorder all tabs in a hub by specifying a new index order array
 
 ### Delete
 

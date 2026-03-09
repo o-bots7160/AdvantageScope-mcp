@@ -82,6 +82,72 @@ describe("layout workflow", () => {
     expect(final.hubs[0].state.tabs.selected).toBe(1);
   });
 
+  it("moves a tab from one position to another preserving config", () => {
+    const layoutPath = path.join(tmpDir, "test-layout.json");
+    const layout = createEmptyLayout();
+    // Tabs: [Doc(0), LineGraph(1), Field2d(2), Table(3)]
+    const lg = createTab(1 as TabType, "LineGraph");
+    lg.controller = { leftSources: ["/a"] };
+    layout.hubs[0].state.tabs.tabs.push(lg);
+    layout.hubs[0].state.tabs.tabs.push(createTab(2 as TabType, "Field2d"));
+    layout.hubs[0].state.tabs.tabs.push(createTab(4 as TabType, "Table"));
+    layout.hubs[0].state.tabs.selected = 1; // LineGraph selected
+    writeLayout(layoutPath, layout);
+
+    // Move LineGraph (index 1) to end (index 3)
+    const read = readLayout(layoutPath);
+    const tabs = read.hubs[0].state.tabs;
+    const [moved] = tabs.tabs.splice(1, 1);
+    tabs.tabs.splice(3, 0, moved);
+    // Adjust selected: was 1 (the moved tab), should now be 3
+    tabs.selected = 3;
+    writeLayout(layoutPath, read);
+
+    const final = readLayout(layoutPath);
+    const finalTabs = final.hubs[0].state.tabs;
+    expect(finalTabs.tabs).toHaveLength(4);
+    expect(finalTabs.tabs[0].title).toBe(""); // Documentation
+    expect(finalTabs.tabs[1].title).toBe("Field2d");
+    expect(finalTabs.tabs[2].title).toBe("Table");
+    expect(finalTabs.tabs[3].title).toBe("LineGraph");
+    // Verify controller was preserved
+    expect(finalTabs.tabs[3].controller).toEqual({ leftSources: ["/a"] });
+    expect(finalTabs.selected).toBe(3);
+  });
+
+  it("reorders all tabs preserving config", () => {
+    const layoutPath = path.join(tmpDir, "test-layout.json");
+    const layout = createEmptyLayout();
+    // Tabs: [Doc(0), LineGraph(1), Field2d(2), Table(3)]
+    layout.hubs[0].state.tabs.tabs.push(createTab(1 as TabType, "LineGraph"));
+    const f2d = createTab(2 as TabType, "Field2d");
+    f2d.renderer = { mode: "cinematic" };
+    layout.hubs[0].state.tabs.tabs.push(f2d);
+    layout.hubs[0].state.tabs.tabs.push(createTab(4 as TabType, "Table"));
+    layout.hubs[0].state.tabs.selected = 2; // Field2d selected
+    writeLayout(layoutPath, layout);
+
+    // Reorder: [Table(3), Doc(0), Field2d(2), LineGraph(1)]
+    const read = readLayout(layoutPath);
+    const tabs = read.hubs[0].state.tabs;
+    const order = [3, 0, 2, 1];
+    const oldTabs = tabs.tabs;
+    tabs.tabs = order.map(i => oldTabs[i]);
+    tabs.selected = order.indexOf(2); // Field2d was index 2, now at position 2
+    writeLayout(layoutPath, read);
+
+    const final = readLayout(layoutPath);
+    const finalTabs = final.hubs[0].state.tabs;
+    expect(finalTabs.tabs).toHaveLength(4);
+    expect(finalTabs.tabs[0].title).toBe("Table");
+    expect(finalTabs.tabs[1].title).toBe(""); // Documentation
+    expect(finalTabs.tabs[2].title).toBe("Field2d");
+    expect(finalTabs.tabs[3].title).toBe("LineGraph");
+    // Verify renderer was preserved
+    expect(finalTabs.tabs[2].renderer).toEqual({ mode: "cinematic" });
+    expect(finalTabs.selected).toBe(2);
+  });
+
   it("adds and removes hubs", () => {
     const layoutPath = path.join(tmpDir, "test-layout.json");
     const layout = createEmptyLayout();
