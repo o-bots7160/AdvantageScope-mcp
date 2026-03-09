@@ -69,7 +69,7 @@ Key conventions:
 - Return JSON as formatted text content (`JSON.stringify(result, null, 2)`)
 - Tool names use `snake_case`
 
-### Implemented Tools (15 total)
+### Implemented Tools (16 total)
 
 **Read/Inspect:**
 - `list_assets` — List AdvantageScope custom asset directories within a base directory, optionally filtered by type
@@ -91,6 +91,7 @@ Key conventions:
 **Modify:**
 - `update_asset_config` — Merge updates into an existing asset config.json with validation
 - `update_preferences` — Update AdvantageScope preferences (merges with existing, validates before saving)
+- `update_tab` — Update an existing tab's title, controller, and/or renderer config (shallow-merges with existing)
 
 **Delete:**
 - `remove_tab` — Remove a tab from a layout by index (auto-adjusts selected tab)

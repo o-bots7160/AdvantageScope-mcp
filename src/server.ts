@@ -456,14 +456,16 @@ export function createServer(): McpServer {
 
   server.tool(
     "add_tab",
-    "Add a new tab to an AdvantageScope layout",
+    "Add a new tab to an AdvantageScope layout with optional controller/renderer configuration",
     {
       file_path: z.string().describe("Path to the layout state JSON file"),
       hub_index: z.number().int().min(0).optional().describe("Hub (window) index to add the tab to (default: 0)"),
       tab_type: z.number().int().min(0).max(12).describe("Tab type ID (0=Documentation, 1=LineGraph, 2=Field2d, 3=Field3d, 4=Table, 5=Console, 6=Statistics, 7=Video, 8=Joysticks, 9=Swerve, 10=Mechanism, 11=Points, 12=Metadata)"),
       title: z.string().optional().describe("Tab title (defaults to tab type name)"),
+      controller: z.record(z.string(), z.unknown()).optional().describe("Tab-specific controller configuration object"),
+      renderer: z.record(z.string(), z.unknown()).optional().describe("Tab-specific renderer configuration object"),
     },
-    async ({ file_path, hub_index, tab_type, title }) => {
+    async ({ file_path, hub_index, tab_type, title, controller, renderer }) => {
       try {
         const layout = readLayout(file_path);
         const idx = hub_index ?? 0;
@@ -474,6 +476,8 @@ export function createServer(): McpServer {
           };
         }
         const tab = createTab(tab_type as TabType, title);
+        if (controller !== undefined) tab.controller = controller;
+        if (renderer !== undefined) tab.renderer = renderer;
         layout.hubs[idx].state.tabs.tabs.push(tab);
         writeLayout(file_path, layout);
         const tabIndex = layout.hubs[idx].state.tabs.tabs.length - 1;
@@ -490,6 +494,70 @@ export function createServer(): McpServer {
               },
             }, null, 2),
           }],
+        };
+      } catch (e) {
+        return {
+          content: [{ type: "text" as const, text: `Error: ${(e as Error).message}` }],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  server.tool(
+    "update_tab",
+    "Update properties of an existing tab in an AdvantageScope layout (title, controller, renderer). Controller and renderer objects are shallow-merged with existing values.",
+    {
+      file_path: z.string().describe("Path to the layout state JSON file"),
+      hub_index: z.number().int().min(0).optional().describe("Hub (window) index (default: 0)"),
+      tab_index: z.number().int().min(0).describe("Tab index to update"),
+      title: z.string().optional().describe("New tab title"),
+      controller: z.record(z.string(), z.unknown()).optional().describe("Controller properties to merge into existing controller config"),
+      renderer: z.record(z.string(), z.unknown()).optional().describe("Renderer properties to merge into existing renderer config"),
+    },
+    async ({ file_path, hub_index, tab_index, title, controller, renderer }) => {
+      try {
+        const layout = readLayout(file_path);
+        const hi = hub_index ?? 0;
+        if (hi >= layout.hubs.length) {
+          return {
+            content: [{ type: "text" as const, text: `Error: hub index ${hi} out of range (${layout.hubs.length} hubs)` }],
+            isError: true,
+          };
+        }
+        const tabs = layout.hubs[hi].state.tabs;
+        if (tab_index >= tabs.tabs.length) {
+          return {
+            content: [{ type: "text" as const, text: `Error: tab index ${tab_index} out of range (${tabs.tabs.length} tabs in hub ${hi})` }],
+            isError: true,
+          };
+        }
+        const tab = tabs.tabs[tab_index];
+        if (title !== undefined) tab.title = title;
+        if (controller !== undefined) {
+          tab.controller = tab.controller && typeof tab.controller === "object" && !Array.isArray(tab.controller)
+            ? { ...(tab.controller as Record<string, unknown>), ...controller }
+            : controller;
+        }
+        if (renderer !== undefined) {
+          tab.renderer = tab.renderer && typeof tab.renderer === "object" && !Array.isArray(tab.renderer)
+            ? { ...(tab.renderer as Record<string, unknown>), ...renderer }
+            : renderer;
+        }
+        writeLayout(file_path, layout);
+        const result = {
+          updated: {
+            hub: hi,
+            tabIndex: tab_index,
+            type: tab.type,
+            typeName: TAB_TYPE_NAMES[tab.type as TabType] ?? `Unknown(${tab.type})`,
+            title: tab.title,
+            controller: tab.controller,
+            renderer: tab.renderer,
+          },
+        };
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(result, null, 2) }],
         };
       } catch (e) {
         return {

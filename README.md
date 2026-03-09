@@ -67,7 +67,8 @@ Add to your `.vscode/mcp.json`:
 
 - **`update_asset_config`** — Merge updates into an existing asset config.json with validation
 - **`update_preferences`** — Update AdvantageScope preferences (merges with existing)
-- **`add_tab`** — Add a tab to an existing layout by type ID
+- **`update_tab`** — Update an existing tab's title, controller, and/or renderer config
+- **`add_tab`** — Add a tab to an existing layout by type ID with optional controller/renderer config
 - **`remove_tab`** — Remove a tab from a layout by index
 
 ## Development
