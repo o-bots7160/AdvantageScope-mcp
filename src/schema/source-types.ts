@@ -9,23 +9,44 @@
 // ─── Option value definitions ────────────────────────────────────
 
 export const GRAPH_COLORS = [
-  "orange", "yellow", "green", "blue", "purple", "brown", "red", "white", "black",
+  "#2b66a2", "#e5b31b", "#af2437", "#80588e", "#e48b32",
+  "#c0b487", "#858584", "#3b875a", "#d993aa", "#5f4528",
 ] as const;
+
+export const GRAPH_COLOR_NAMES: Record<string, string> = {
+  "#2b66a2": "Blue", "#e5b31b": "Gold", "#af2437": "Red",
+  "#80588e": "Purple", "#e48b32": "Orange", "#c0b487": "Tan",
+  "#858584": "Gray", "#3b875a": "Green", "#d993aa": "Pink",
+  "#5f4528": "Brown",
+};
 
 export const NEON_COLORS = [
-  "#00ff00", "#00ffff", "#ff00ff", "#ffff00", "#ff8800",
-  "#0088ff", "#ff0000", "#00ff88", "#8800ff", "#ff0088",
+  "#00ff00", "#ff0000", "#0000ff", "#ff8c00", "#00ffff", "#ffff00", "#ff00ff",
 ] as const;
 
+export const NEON_COLOR_NAMES: Record<string, string> = {
+  "#00ff00": "Green", "#ff0000": "Red", "#0000ff": "Blue",
+  "#ff8c00": "Orange", "#00ffff": "Cyan", "#ffff00": "Yellow",
+  "#ff00ff": "Magenta",
+};
+
 export const NEON_COLORS_RED_START = [
-  "#ff0000", "#00ff00", "#00ffff", "#ff00ff", "#ffff00",
-  "#ff8800", "#0088ff", "#00ff88", "#8800ff", "#ff0088",
+  "#ff0000", "#0000ff", "#00ff00", "#ff8c00", "#00ffff", "#ffff00", "#ff00ff",
 ] as const;
 
 export const SWERVE_ARRANGEMENTS = [
-  "FL/FR/BL/BR", "FR/FL/BR/BL", "FL/FR/BR/BL",
-  "FL/BL/BR/FR", "FR/BR/BL/FL", "FR/FL/BL/BR",
+  "0,1,2,3", "1,0,3,2", "0,1,3,2",
+  "0,3,1,2", "3,0,2,1", "1,0,2,3",
 ] as const;
+
+export const SWERVE_ARRANGEMENT_NAMES: Record<string, string> = {
+  "0,1,2,3": "FL/FR/BL/BR",
+  "1,0,3,2": "FR/FL/BR/BL",
+  "0,1,3,2": "FL/FR/BR/BL",
+  "0,3,1,2": "FL/BL/BR/FR",
+  "3,0,2,1": "FR/BR/BL/FL",
+  "1,0,2,3": "FR/FL/BL/BR",
+};
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -55,8 +76,14 @@ export interface TabSourceConfig {
   tabName: string;
   /** Section title (e.g., "Sources", "Poses", "Measurements") */
   sectionTitle: string;
+  /** Property path to the sources array within the controller object (null = controller IS the array) */
+  sourcesPath: string | null;
+  /** For tabs with multiple source sections (e.g., LineGraph), lists the section keys */
+  sections?: { key: string; display: string; description: string }[];
   /** All valid source types for this tab */
   types: SourceTypeConfig[];
+  /** Which sections each type belongs to (only for multi-section tabs) */
+  typeSections?: Record<string, string>;
   /** WPILib/AdvantageKit code hints for publishing data */
   wpilibHints: string[];
 }
@@ -162,6 +189,20 @@ export const LINE_GRAPH_CONFIG: TabSourceConfig = {
   tabType: 1,
   tabName: "Line Graph",
   sectionTitle: "Sources",
+  sourcesPath: null, // special: uses sections
+  sections: [
+    { key: "leftSources", display: "Left Axis", description: "Numeric sources displayed on the left Y-axis" },
+    { key: "rightSources", display: "Right Axis", description: "Numeric sources displayed on the right Y-axis" },
+    { key: "discreteSources", display: "Discrete Fields", description: "Discrete (non-numeric) sources displayed as stripes/graphs below the chart" },
+  ],
+  typeSections: {
+    stepped: "leftSources",   // default; can also go to rightSources
+    smooth: "leftSources",
+    points: "leftSources",
+    stripes: "discreteSources",
+    graph: "discreteSources",
+    alerts: "discreteSources",
+  },
   types: [
     // Numeric axis
     {
@@ -209,6 +250,7 @@ export const FIELD2D_CONFIG: TabSourceConfig = {
   tabType: 2,
   tabName: "2D Field",
   sectionTitle: "Poses",
+  sourcesPath: "sources",
   types: [
     {
       key: "robot", display: "Robot",
@@ -272,6 +314,7 @@ export const FIELD3D_CONFIG: TabSourceConfig = {
   tabType: 3,
   tabName: "3D Field",
   sectionTitle: "Poses",
+  sourcesPath: "sources",
   types: [
     {
       key: "robot", display: "Robot",
@@ -380,6 +423,7 @@ export const STATISTICS_CONFIG: TabSourceConfig = {
   tabType: 6,
   tabName: "Statistics",
   sectionTitle: "Measurements",
+  sourcesPath: "sources",
   types: [
     {
       key: "independent", display: "Independent",
@@ -417,6 +461,7 @@ export const SWERVE_CONFIG: TabSourceConfig = {
   tabType: 9,
   tabName: "Swerve",
   sectionTitle: "Sources",
+  sourcesPath: "sources",
   types: [
     {
       key: "states", display: "Module States",
@@ -449,6 +494,7 @@ export const MECHANISM_CONFIG: TabSourceConfig = {
   tabType: 10,
   tabName: "Mechanism",
   sectionTitle: "Sources",
+  sourcesPath: null, // controller IS the flat array
   types: [
     {
       key: "mechanism", display: "Mechanism",
@@ -469,6 +515,7 @@ export const POINTS_CONFIG: TabSourceConfig = {
   tabType: 11,
   tabName: "Points",
   sectionTitle: "Sources",
+  sourcesPath: "sources",
   types: [
     {
       key: "plus", display: "Plus",
@@ -600,6 +647,78 @@ export const SIMPLE_TAB_SCHEMAS: ReadonlyMap<number, SimpleTabSchema> = new Map(
   }],
 ]);
 
+// ─── Controller navigation helpers ───────────────────────────────
+
+/**
+ * Resolve the section key for a LineGraph source type.
+ * For LineGraph, numeric types default to "leftSources" and discrete to "discreteSources".
+ * The `section` parameter allows overriding to "rightSources".
+ */
+export function resolveLineGraphSection(
+  sourceType: string,
+  section?: string,
+): string {
+  const config = LINE_GRAPH_CONFIG;
+  if (section) {
+    const validSections = config.sections!.map((s) => s.key);
+    if (!validSections.includes(section)) {
+      throw new Error(
+        `Invalid section "${section}" for LineGraph. Valid sections: ${validSections.join(", ")}`,
+      );
+    }
+    return section;
+  }
+  // Auto-determine from type
+  return config.typeSections?.[sourceType] ?? "leftSources";
+}
+
+/**
+ * Get the sources array from a controller object for a given tab type and optional section.
+ * Returns { sources, key } where key is the property path used.
+ * Creates the array if it doesn't exist.
+ */
+export function getSourcesArray(
+  controller: unknown,
+  tabType: number,
+  section?: string,
+): { sources: SourceListItemState[]; setBack: (arr: SourceListItemState[]) => void } {
+  const config = TAB_SOURCE_CONFIGS.get(tabType);
+  if (!config) {
+    throw new Error(`Tab type ${tabType} does not use SourceListState`);
+  }
+
+  // LineGraph: multi-section
+  if (config.sections) {
+    const ctrl = (controller ?? {}) as Record<string, unknown>;
+    const sectionKey = section ?? "leftSources";
+    if (!Array.isArray(ctrl[sectionKey])) {
+      ctrl[sectionKey] = [];
+    }
+    return {
+      sources: ctrl[sectionKey] as SourceListItemState[],
+      setBack: (arr) => { ctrl[sectionKey] = arr; },
+    };
+  }
+
+  // Mechanism: controller IS the array
+  if (config.sourcesPath === null) {
+    return {
+      sources: (controller ?? []) as SourceListItemState[],
+      setBack: () => {}, // caller must set tab.controller directly
+    };
+  }
+
+  // Other tabs: controller.sources
+  const ctrl = (controller ?? {}) as Record<string, unknown>;
+  if (!Array.isArray(ctrl[config.sourcesPath])) {
+    ctrl[config.sourcesPath] = [];
+  }
+  return {
+    sources: ctrl[config.sourcesPath] as SourceListItemState[],
+    setBack: (arr) => { ctrl[config.sourcesPath!] = arr; },
+  };
+}
+
 // ─── Validation helpers ──────────────────────────────────────────
 
 export interface SourceListItemState {
@@ -608,6 +727,7 @@ export interface SourceListItemState {
   logType: string;
   visible: boolean;
   options: Record<string, string>;
+  children?: SourceListItemState[];
 }
 
 /** Validate a source item against a tab's source type configuration. Returns error messages. */
@@ -640,6 +760,9 @@ export function validateSourceItem(
   }
 
   // Validate options keys and values
+  const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+  const COLOR_OPTION_KEYS = new Set(["color", "bumpers"]);
+
   for (const [key, value] of Object.entries(item.options)) {
     const optionConfig = typeConfig.options.find((o) => o.key === key);
     if (!optionConfig) {
@@ -654,6 +777,10 @@ export function validateSourceItem(
           `Source type "${item.type}" does not accept any options, but got "${key}"`,
         );
       }
+    } else if (COLOR_OPTION_KEYS.has(key) && HEX_COLOR_RE.test(value)) {
+      // Accept any valid hex color for color/bumpers options
+    } else if (key === "bumpers" && value === "") {
+      // Empty string means "Alliance Color" for bumpers
     } else if (optionConfig.values.length > 0 && !optionConfig.values.includes(value)) {
       errors.push(
         `Invalid value "${value}" for option "${key}". ` +

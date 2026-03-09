@@ -321,8 +321,13 @@ type SourceListItemState = {
   options: {              // Type-specific display options
     [key: string]: string;
   };
+  children?: SourceListItemState[];  // Nested child sources (3D Field robot/ghost components, cameras, etc.)
 };
 ```
+
+**Color values:** Any valid hex color (`#RRGGBB`) is accepted. Preset palette colors (GraphColors, NeonColors) are suggestions for consistency, not strict validation.
+
+**Children nesting:** In 3D Field tabs, parent sources (robot, ghost) can contain nested `children` arrays. Each child is a full `SourceListItemState` (e.g., component, vision, swerveStates). Use the `parent_index` parameter on `add_source`, `update_source`, and `remove_source` to target children.
 
 #### Tab Type Reference
 
@@ -353,10 +358,10 @@ type SourceListItemState = {
   - `"trajectory"` — Path. Source: `Pose2d[]`, `Trajectory`, `DifferentialSample[]`, `SwerveSample[]`, etc. Options: `color`, `size`
   - `"heatmap"` — Position heatmap. Source: Pose/Translation types. Options: `timeRange` (enabled/auto/teleop/teleop-no-endgame/full/visible)
   - `"arrow"` — Direction arrow. Source: Pose types, `Trajectory`. Options: `position` (center/back/front)
-  - `"swerveStates"` — Swerve module vectors (child of robot). Source: `SwerveModuleState[]`. Options: `color`, `arrangement` (FL/FR/BL/BR permutations)
+  - `"swerveStates"` — Swerve module vectors (child of robot). Source: `SwerveModuleState[]`. Options: `color`, `arrangement` (index strings like `"0,1,2,3"` representing FL/FR/BL/BR)
   - `"rotationOverride"` — Rotation override (child of robot). Source: `Rotation2d`, `Rotation3d`. Options: none
 - **NeonColors:** #00ff00, #00ffff, #ff00ff, #ffff00, #ff8800, etc.
-- **Swerve arrangements:** FL/FR/BL/BR, FR/FL/BR/BL, FL/FR/BR/BL, FL/BL/BR/FR, FR/BR/BL/FL, FR/FL/BL/BR
+- **Swerve arrangements** are stored as index strings: `"0,1,2,3"` (FL/FR/BL/BR), `"1,0,3,2"` (FR/FL/BR/BL), `"0,1,3,2"` (FL/FR/BR/BL), `"0,3,1,2"` (FL/BL/BR/FR), `"3,0,2,1"` (FR/BR/BL/FL), `"1,0,2,3"` (FR/FL/BL/BR)
 
 ##### Field3d (type: 3)
 - **Controller:** `SourceListState`
@@ -405,7 +410,7 @@ type SourceListItemState = {
 - **Controller:** `SourceListState`
 - **Purpose:** Swerve drive module vector display with velocity/rotation visualization
 - **Types:**
-  - `"states"` — Module states. Source: `SwerveModuleState[]`. Options: `color` (NeonColors), `arrangement` (FL/FR/BL/BR permutations)
+  - `"states"` — Module states. Source: `SwerveModuleState[]`. Options: `color` (NeonColors), `arrangement` (index strings, e.g., `"0,1,2,3"` for FL/FR/BL/BR)
   - `"chassisSpeeds"` — Chassis speeds vector. Source: `ChassisSpeeds`. Options: `color`
   - `"rotation"` — Robot rotation indicator. Source: `Rotation2d`, `Rotation3d`. Options: none
 - **Configuration:** Max speed (for vector sizing), frame size (L/R and F/B distances), orientation

@@ -5,6 +5,8 @@ import {
   SOURCE_LIST_TAB_TYPES,
   validateSourceItem,
   validateParentChild,
+  getSourcesArray,
+  resolveLineGraphSection,
   type SourceListItemState,
 } from "../src/schema/source-types.js";
 
@@ -57,7 +59,7 @@ describe("validateSourceItem", () => {
       logKey: "/RealOutputs/Drive/LeftVelocity",
       logType: "Number",
       visible: true,
-      options: { color: "orange", size: "bold" },
+      options: { color: "#e48b32", size: "bold" },
     };
     expect(validateSourceItem(1, item)).toEqual([]);
   });
@@ -68,7 +70,7 @@ describe("validateSourceItem", () => {
       logKey: "/RealOutputs/Drive/SwerveStates",
       logType: "SwerveModuleState[]",
       visible: true,
-      options: { arrangement: "FL/FR/BL/BR" },
+      options: { arrangement: "0,1,2,3" },
     };
     expect(validateSourceItem(9, item)).toEqual([]);
   });
@@ -139,6 +141,39 @@ describe("validateSourceItem", () => {
     expect(errors[0]).toContain("rainbow");
   });
 
+  it("accepts hex color values from GraphColors", () => {
+    const item: SourceListItemState = {
+      type: "stepped",
+      logKey: "/test",
+      logType: "Number",
+      visible: true,
+      options: { color: "#2b66a2" }, // Blue
+    };
+    expect(validateSourceItem(1, item)).toEqual([]);
+  });
+
+  it("accepts arbitrary hex colors not in preset list", () => {
+    const item: SourceListItemState = {
+      type: "stepped",
+      logKey: "/test",
+      logType: "Number",
+      visible: true,
+      options: { color: "#7c5cff" }, // Custom purple, not in presets
+    };
+    expect(validateSourceItem(1, item)).toEqual([]);
+  });
+
+  it("accepts empty string for bumpers (Alliance Color)", () => {
+    const item: SourceListItemState = {
+      type: "robot",
+      logKey: "/pose",
+      logType: "Pose2d",
+      visible: true,
+      options: { bumpers: "" },
+    };
+    expect(validateSourceItem(2, item)).toEqual([]);
+  });
+
   it("returns error for non-SourceListState tab types", () => {
     const item: SourceListItemState = {
       type: "stepped",
@@ -181,7 +216,7 @@ describe("validateSourceItem", () => {
       logKey: "/SmartDashboard/Arm",
       logType: "Mechanism2d",
       visible: true,
-      options: { color: "red" },
+      options: { color: "#ff0000" },
     };
     const errors = validateSourceItem(10, item);
     expect(errors.length).toBe(1);
@@ -205,7 +240,7 @@ describe("validateSourceItem", () => {
       logKey: "/RealOutputs/Error",
       logType: "Number",
       visible: true,
-      options: { color: "red" },
+      options: { color: "#af2437" },
     };
     expect(validateSourceItem(6, item)).toEqual([]);
   });
@@ -269,5 +304,81 @@ describe("validateParentChild", () => {
   it("returns null for non-SourceListState tabs", () => {
     const result = validateParentChild(4, [], "anything");
     expect(result).toBeNull();
+  });
+});
+
+describe("resolveLineGraphSection", () => {
+  it("auto-detects numeric types to leftSources", () => {
+    expect(resolveLineGraphSection("stepped")).toBe("leftSources");
+    expect(resolveLineGraphSection("smooth")).toBe("leftSources");
+    expect(resolveLineGraphSection("points")).toBe("leftSources");
+  });
+
+  it("auto-detects discrete types to discreteSources", () => {
+    expect(resolveLineGraphSection("stripes")).toBe("discreteSources");
+    expect(resolveLineGraphSection("graph")).toBe("discreteSources");
+    expect(resolveLineGraphSection("alerts")).toBe("discreteSources");
+  });
+
+  it("allows explicit rightSources override", () => {
+    expect(resolveLineGraphSection("stepped", "rightSources")).toBe("rightSources");
+  });
+
+  it("throws for invalid section", () => {
+    expect(() => resolveLineGraphSection("stepped", "invalid")).toThrow("Invalid section");
+  });
+});
+
+describe("getSourcesArray", () => {
+  it("navigates to sources property for Field2d", () => {
+    const ctrl = { sources: [{ type: "robot", logKey: "/pose", logType: "Pose2d", visible: true, options: {} }], field: "2024" };
+    const { sources } = getSourcesArray(ctrl, 2);
+    expect(sources.length).toBe(1);
+    expect(sources[0].type).toBe("robot");
+  });
+
+  it("navigates to sources property for Swerve", () => {
+    const ctrl = { sources: [], maxSpeed: 4.5 };
+    const { sources } = getSourcesArray(ctrl, 9);
+    expect(sources).toEqual([]);
+  });
+
+  it("returns flat array for Mechanism", () => {
+    const ctrl = [{ type: "mechanism", logKey: "/mech", logType: "Mechanism2d", visible: true, options: {} }];
+    const { sources } = getSourcesArray(ctrl, 10);
+    expect(sources.length).toBe(1);
+  });
+
+  it("navigates to leftSources for LineGraph", () => {
+    const ctrl = {
+      leftSources: [{ type: "stepped", logKey: "/a", logType: "Number", visible: true, options: {} }],
+      rightSources: [],
+      discreteSources: [],
+    };
+    const { sources } = getSourcesArray(ctrl, 1, "leftSources");
+    expect(sources.length).toBe(1);
+    expect(sources[0].logKey).toBe("/a");
+  });
+
+  it("navigates to rightSources for LineGraph", () => {
+    const ctrl = {
+      leftSources: [],
+      rightSources: [{ type: "smooth", logKey: "/b", logType: "Number", visible: true, options: {} }],
+      discreteSources: [],
+    };
+    const { sources } = getSourcesArray(ctrl, 1, "rightSources");
+    expect(sources.length).toBe(1);
+    expect(sources[0].logKey).toBe("/b");
+  });
+
+  it("creates empty array when missing for Field2d", () => {
+    const ctrl = { field: "2024" } as Record<string, unknown>;
+    const { sources } = getSourcesArray(ctrl, 2);
+    expect(sources).toEqual([]);
+    expect(ctrl.sources).toEqual([]);
+  });
+
+  it("throws for non-SourceListState tab", () => {
+    expect(() => getSourcesArray(null, 4)).toThrow("does not use SourceListState");
   });
 });

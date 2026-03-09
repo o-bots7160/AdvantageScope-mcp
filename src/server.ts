@@ -26,6 +26,11 @@ import {
   SOURCE_LIST_TAB_TYPES,
   validateSourceItem,
   validateParentChild,
+  getSourcesArray,
+  resolveLineGraphSection,
+  GRAPH_COLOR_NAMES,
+  NEON_COLOR_NAMES,
+  SWERVE_ARRANGEMENT_NAMES,
   type SourceListItemState,
 } from "./schema/source-types.js";
 import {
@@ -393,17 +398,92 @@ export function createServer(): McpServer {
       // Check if it's a SourceListState tab
       const sourceConfig = TAB_SOURCE_CONFIGS.get(tab_type);
       if (sourceConfig) {
+        // Build controller format description based on actual state shape
+        let controllerFormat: string;
+        let controllerShape: Record<string, string> | undefined;
+
+        if (sourceConfig.sections) {
+          controllerFormat = "Object with multiple source arrays (see controllerShape)";
+          controllerShape = {};
+          for (const section of sourceConfig.sections) {
+            controllerShape[section.key] = `SourceListItemState[] — ${section.description}`;
+          }
+          // Add LineGraph-specific fields
+          if (sourceConfig.tabType === 1) {
+            controllerShape.leftLockedRange = "[number, number] | null — locked Y-axis range for left axis";
+            controllerShape.rightLockedRange = "[number, number] | null — locked Y-axis range for right axis";
+            controllerShape.leftUnitConversion = "object — unit conversion for left axis";
+            controllerShape.rightUnitConversion = "object — unit conversion for right axis";
+            controllerShape.leftFilter = "string — filter for left axis ('none', 'differentiate', 'integrate')";
+            controllerShape.rightFilter = "string — filter for right axis";
+          }
+        } else if (sourceConfig.sourcesPath === null) {
+          controllerFormat = "SourceListItemState[] — controller IS the flat array";
+        } else {
+          controllerFormat = `Object with '${sourceConfig.sourcesPath}' array (see controllerShape)`;
+          controllerShape = { [sourceConfig.sourcesPath]: "SourceListItemState[]" };
+          // Add tab-specific config fields
+          if (sourceConfig.tabType === 2) {
+            controllerShape.field = "string — field image name (e.g., 'FRC:2026 Field')";
+            controllerShape.orientation = "number — field orientation (0=default)";
+            controllerShape.size = "string — robot size display ('large', 'medium', 'small')";
+          } else if (sourceConfig.tabType === 3) {
+            controllerShape.game = "string — 3D field model name";
+          } else if (sourceConfig.tabType === 6) {
+            controllerShape.timeRange = "string — time range for statistics";
+            controllerShape.rangeMin = "number — histogram range minimum";
+            controllerShape.rangeMax = "number — histogram range maximum";
+            controllerShape.stepSize = "number — histogram step size";
+          } else if (sourceConfig.tabType === 9) {
+            controllerShape.maxSpeed = "number — max module speed (for vector sizing)";
+            controllerShape.sizeX = "number — left-right module distance";
+            controllerShape.sizeY = "number — front-back module distance";
+            controllerShape.orientation = "number — diagram orientation (0=up, 1=right, 2=down, 3=left)";
+          } else if (sourceConfig.tabType === 11) {
+            controllerShape.width = "number — display area width";
+            controllerShape.height = "number — display area height";
+            controllerShape.orientation = "string — coordinate system orientation";
+            controllerShape.origin = "string — origin position";
+          }
+        }
+
+        // Build color reference for types that use colors
+        const colorReference: Record<string, Record<string, string>> = {};
+        const hasGraphColors = sourceConfig.types.some(
+          (t) => t.options.some((o) => o.key === "color" && o.values.includes("#2b66a2")),
+        );
+        const hasNeonColors = sourceConfig.types.some(
+          (t) => t.options.some((o) => o.key === "color" && o.values.includes("#00ff00")),
+        );
+        if (hasGraphColors) colorReference.graphColors = GRAPH_COLOR_NAMES;
+        if (hasNeonColors) colorReference.neonColors = NEON_COLOR_NAMES;
+
+        // Build arrangement reference for swerve tabs
+        const hasSwerveArrangements = sourceConfig.types.some(
+          (t) => t.options.some((o) => o.key === "arrangement"),
+        );
+
         const schema = {
           tabType: sourceConfig.tabType,
           tabName: sourceConfig.tabName,
-          controllerFormat: "SourceListState (array of SourceListItemState objects)",
+          controllerFormat,
+          ...(controllerShape ? { controllerShape } : {}),
           sectionTitle: sourceConfig.sectionTitle,
+          ...(sourceConfig.sections ? {
+            sections: sourceConfig.sections.map((s) => ({
+              key: s.key,
+              display: s.display,
+              description: s.description,
+            })),
+            typeSections: sourceConfig.typeSections,
+          } : {}),
           sourceItemFormat: {
             type: "string — visualization type key (see 'types' below)",
             logKey: "string — log field path (e.g., '/RealOutputs/Drive/Pose')",
             logType: "string — data type (must match one of the sourceTypes for the chosen type)",
             visible: "boolean — whether this source is shown",
-            options: "object — key/value pairs (see type-specific options below)",
+            options: "object — key/value pairs with hex color values and enum strings (see type-specific options below)",
+            children: "SourceListItemState[] (optional) — nested child sources (used by 3D field robot/ghost for components, cameras, etc.)",
           },
           types: sourceConfig.types.map((t) => ({
             key: t.key,
@@ -417,9 +497,19 @@ export function createServer(): McpServer {
             ...(t.childOf ? { childOf: t.childOf, note: `Must be added as child of a '${t.childOf}' parent source` } : {}),
             ...(t.parentKey ? { parentKey: t.parentKey, note: "Can have child sources attached" } : {}),
           })),
+          ...(Object.keys(colorReference).length > 0 ? {
+            colorReference,
+            colorNote: "Any valid hex color (#RRGGBB) is accepted. The preset colors above are suggestions for consistency.",
+          } : {}),
+          ...(hasSwerveArrangements ? {
+            arrangementReference: SWERVE_ARRANGEMENT_NAMES,
+            arrangementNote: "Arrangement values are stored as index strings (e.g., '0,1,2,3'). The reference shows the module order each value represents.",
+          } : {}),
           wpilibHints: sourceConfig.wpilibHints,
           supportsSourceManagement: true,
-          note: "Use add_source, update_source, remove_source tools to manage sources on this tab type.",
+          note: sourceConfig.sections
+            ? "Use add_source with 'section' parameter to target left/right/discrete. Use update_source/remove_source with 'section' to modify."
+            : "Use add_source, update_source, remove_source tools to manage sources on this tab type.",
         };
         return {
           content: [{ type: "text" as const, text: JSON.stringify(schema, null, 2) }],
@@ -925,7 +1015,7 @@ export function createServer(): McpServer {
 
   server.tool(
     "add_source",
-    "Add a data source to a SourceListState tab (LineGraph, Field2d, Field3d, Statistics, Swerve, Mechanism, Points). Validates type, logType, and options against AdvantageScope's actual schema.",
+    "Add a data source to a SourceListState tab (LineGraph, Field2d, Field3d, Statistics, Swerve, Mechanism, Points). Validates type, logType, and options against AdvantageScope's actual schema. For LineGraph, use the 'section' parameter to target left axis, right axis, or discrete fields.",
     {
       file_path: z.string().describe("Path to the layout state JSON file"),
       hub_index: z.number().int().min(0).optional().describe("Hub (window) index (default: 0)"),
@@ -934,9 +1024,11 @@ export function createServer(): McpServer {
       log_key: z.string().describe("Log field path (e.g., '/RealOutputs/Drive/Pose')"),
       log_type: z.string().describe("Data type string (e.g., 'Number', 'Pose2d', 'SwerveModuleState[]'). Must match one of the sourceTypes for the chosen type."),
       visible: z.boolean().optional().describe("Whether this source is visible (default: true)"),
-      options: z.record(z.string(), z.string()).optional().describe("Type-specific display options (e.g., {color: 'orange', size: 'bold'})"),
+      options: z.record(z.string(), z.string()).optional().describe("Type-specific display options. Colors are hex values (e.g., {color: '#2b66a2', size: 'bold'})"),
+      section: z.string().optional().describe("LineGraph only: which section to add to ('leftSources', 'rightSources', or 'discreteSources'). Auto-detected from type if omitted."),
+      parent_index: z.number().int().min(0).optional().describe("For 3D Field child sources (component, swerveStates, vision, etc.): index of the parent source (robot/ghost) to nest this child under. The child will be added to the parent's 'children' array."),
     },
-    async ({ file_path, hub_index, tab_index, type, log_key, log_type, visible, options }) => {
+    async ({ file_path, hub_index, tab_index, type, log_key, log_type, visible, options, section, parent_index }) => {
       try {
         const layout = readLayout(file_path);
         const hi = hub_index ?? 0;
@@ -979,24 +1071,84 @@ export function createServer(): McpServer {
           };
         }
 
-        // Validate parent/child relationship
-        const existingSources = (Array.isArray(tab.controller) ? tab.controller : []) as SourceListItemState[];
-        const parentError = validateParentChild(tab.type, existingSources, type);
-        if (parentError) {
+        // Resolve section for LineGraph
+        let resolvedSection: string | undefined;
+        if (tab.type === 1) {
+          resolvedSection = resolveLineGraphSection(type, section);
+        }
+
+        // Initialize controller if needed
+        const config = TAB_SOURCE_CONFIGS.get(tab.type)!;
+        if (config.sections && (tab.controller === null || tab.controller === undefined)) {
+          tab.controller = {};
+        } else if (config.sourcesPath !== null && (tab.controller === null || tab.controller === undefined)) {
+          tab.controller = {};
+        } else if (config.sourcesPath === null && !config.sections && !Array.isArray(tab.controller)) {
+          tab.controller = [];
+        }
+
+        // Navigate to the correct sources array
+        const { sources } = getSourcesArray(tab.controller, tab.type, resolvedSection);
+
+        // Validate parent/child relationship against all sources in the section
+        const parentError = validateParentChild(tab.type, sources, type);
+        if (parentError && parent_index === undefined) {
           return {
             content: [{ type: "text" as const, text: `Warning: ${parentError}` }],
             isError: true,
           };
         }
 
-        // Add the source
-        if (!Array.isArray(tab.controller)) {
-          tab.controller = [];
+        // Add the source — either as a child of a parent or at the top level
+        if (parent_index !== undefined) {
+          // Adding as a child of an existing parent source
+          if (parent_index >= sources.length) {
+            return {
+              content: [{ type: "text" as const, text: `Error: parent_index ${parent_index} out of range (${sources.length} sources)` }],
+              isError: true,
+            };
+          }
+          const parentSource = sources[parent_index] as SourceListItemState;
+          if (!parentSource.children) {
+            parentSource.children = [];
+          }
+          parentSource.children.push(newSource);
+
+          // For Mechanism (flat array), set controller directly
+          if (config.sourcesPath === null && !config.sections) {
+            tab.controller = sources;
+          }
+
+          writeLayout(file_path, layout);
+
+          const childIndex = parentSource.children.length - 1;
+          return {
+            content: [{
+              type: "text" as const,
+              text: JSON.stringify({
+                added: {
+                  hub: hi,
+                  tabIndex: tab_index,
+                  parentIndex: parent_index,
+                  childIndex,
+                  source: newSource,
+                },
+              }, null, 2),
+            }],
+          };
         }
-        (tab.controller as SourceListItemState[]).push(newSource);
+
+        // Top-level add
+        sources.push(newSource);
+
+        // For Mechanism (flat array), we need to set controller directly
+        if (config.sourcesPath === null && !config.sections) {
+          tab.controller = sources;
+        }
+
         writeLayout(file_path, layout);
 
-        const sourceIndex = (tab.controller as SourceListItemState[]).length - 1;
+        const sourceIndex = sources.length - 1;
         return {
           content: [{
             type: "text" as const,
@@ -1004,6 +1156,7 @@ export function createServer(): McpServer {
               added: {
                 hub: hi,
                 tabIndex: tab_index,
+                ...(resolvedSection ? { section: resolvedSection } : {}),
                 sourceIndex,
                 source: newSource,
               },
@@ -1021,19 +1174,21 @@ export function createServer(): McpServer {
 
   server.tool(
     "update_source",
-    "Update an existing data source in a SourceListState tab by index. Can change type, logKey, logType, visibility, and options.",
+    "Update an existing data source in a SourceListState tab by index. Can change type, logKey, logType, visibility, and options. For LineGraph, specify the section containing the source.",
     {
       file_path: z.string().describe("Path to the layout state JSON file"),
       hub_index: z.number().int().min(0).optional().describe("Hub (window) index (default: 0)"),
       tab_index: z.number().int().min(0).describe("Tab index within the hub"),
-      source_index: z.number().int().min(0).describe("Source index within the tab's source list"),
+      source_index: z.number().int().min(0).describe("Source index within the section's source list"),
+      section: z.string().optional().describe("LineGraph only: section containing the source ('leftSources', 'rightSources', or 'discreteSources'). Required for LineGraph tabs."),
       type: z.string().optional().describe("New visualization type key"),
       log_key: z.string().optional().describe("New log field path"),
       log_type: z.string().optional().describe("New data type string"),
       visible: z.boolean().optional().describe("New visibility state"),
-      options: z.record(z.string(), z.string()).optional().describe("Options to merge into existing options"),
+      options: z.record(z.string(), z.string()).optional().describe("Options to merge into existing options (hex colors, e.g., '#2b66a2')"),
+      parent_index: z.number().int().min(0).optional().describe("If targeting a child source nested under a parent (e.g., 3D Field component under a robot), specify the parent's index here. source_index then refers to the child index within that parent's children array."),
     },
-    async ({ file_path, hub_index, tab_index, source_index, type, log_key, log_type, visible, options }) => {
+    async ({ file_path, hub_index, tab_index, source_index, section, type, log_key, log_type, visible, options, parent_index }) => {
       try {
         const layout = readLayout(file_path);
         const hi = hub_index ?? 0;
@@ -1058,15 +1213,44 @@ export function createServer(): McpServer {
           };
         }
 
-        const sources = tab.controller as SourceListItemState[];
-        if (!Array.isArray(sources) || source_index >= sources.length) {
+        // LineGraph requires section
+        const config = TAB_SOURCE_CONFIGS.get(tab.type)!;
+        if (config.sections && !section) {
           return {
-            content: [{ type: "text" as const, text: `Error: source index ${source_index} out of range (${Array.isArray(sources) ? sources.length : 0} sources)` }],
+            content: [{ type: "text" as const, text: `Error: LineGraph requires 'section' parameter ('leftSources', 'rightSources', or 'discreteSources')` }],
             isError: true,
           };
         }
 
-        const source = sources[source_index];
+        const { sources } = getSourcesArray(tab.controller, tab.type, section);
+
+        // Resolve the target source — either top-level or a child
+        let source: SourceListItemState;
+        if (parent_index !== undefined) {
+          if (parent_index >= sources.length) {
+            return {
+              content: [{ type: "text" as const, text: `Error: parent_index ${parent_index} out of range (${sources.length} sources${section ? ` in ${section}` : ""})` }],
+              isError: true,
+            };
+          }
+          const parentSource = sources[parent_index] as SourceListItemState;
+          const children = parentSource.children ?? [];
+          if (source_index >= children.length) {
+            return {
+              content: [{ type: "text" as const, text: `Error: child source_index ${source_index} out of range (${children.length} children in parent ${parent_index})` }],
+              isError: true,
+            };
+          }
+          source = children[source_index];
+        } else {
+          if (source_index >= sources.length) {
+            return {
+              content: [{ type: "text" as const, text: `Error: source index ${source_index} out of range (${sources.length} sources${section ? ` in ${section}` : ""})` }],
+              isError: true,
+            };
+          }
+          source = sources[source_index];
+        }
         if (type !== undefined) source.type = type;
         if (log_key !== undefined) source.logKey = log_key;
         if (log_type !== undefined) source.logType = log_type;
@@ -1090,6 +1274,8 @@ export function createServer(): McpServer {
               updated: {
                 hub: hi,
                 tabIndex: tab_index,
+                ...(section ? { section } : {}),
+                ...(parent_index !== undefined ? { parentIndex: parent_index } : {}),
                 sourceIndex: source_index,
                 source,
               },
@@ -1107,14 +1293,16 @@ export function createServer(): McpServer {
 
   server.tool(
     "remove_source",
-    "Remove a data source from a SourceListState tab by index",
+    "Remove a data source from a SourceListState tab by index. For LineGraph, specify the section.",
     {
       file_path: z.string().describe("Path to the layout state JSON file"),
       hub_index: z.number().int().min(0).optional().describe("Hub (window) index (default: 0)"),
       tab_index: z.number().int().min(0).describe("Tab index within the hub"),
       source_index: z.number().int().min(0).describe("Source index to remove"),
+      section: z.string().optional().describe("LineGraph only: section containing the source ('leftSources', 'rightSources', or 'discreteSources'). Required for LineGraph tabs."),
+      parent_index: z.number().int().min(0).optional().describe("If removing a child source nested under a parent (e.g., 3D Field component under a robot), specify the parent's index here. source_index then refers to the child index within that parent's children array."),
     },
-    async ({ file_path, hub_index, tab_index, source_index }) => {
+    async ({ file_path, hub_index, tab_index, source_index, section, parent_index }) => {
       try {
         const layout = readLayout(file_path);
         const hi = hub_index ?? 0;
@@ -1139,15 +1327,56 @@ export function createServer(): McpServer {
           };
         }
 
-        const sources = tab.controller as SourceListItemState[];
-        if (!Array.isArray(sources) || source_index >= sources.length) {
+        // LineGraph requires section
+        const config = TAB_SOURCE_CONFIGS.get(tab.type)!;
+        if (config.sections && !section) {
           return {
-            content: [{ type: "text" as const, text: `Error: source index ${source_index} out of range (${Array.isArray(sources) ? sources.length : 0} sources)` }],
+            content: [{ type: "text" as const, text: `Error: LineGraph requires 'section' parameter ('leftSources', 'rightSources', or 'discreteSources')` }],
             isError: true,
           };
         }
 
-        const removed = sources.splice(source_index, 1)[0];
+        const { sources } = getSourcesArray(tab.controller, tab.type, section);
+
+        let removed: SourceListItemState;
+        let remainingCount: number;
+
+        if (parent_index !== undefined) {
+          if (parent_index >= sources.length) {
+            return {
+              content: [{ type: "text" as const, text: `Error: parent_index ${parent_index} out of range (${sources.length} sources${section ? ` in ${section}` : ""})` }],
+              isError: true,
+            };
+          }
+          const parentSource = sources[parent_index] as SourceListItemState;
+          const children = parentSource.children ?? [];
+          if (source_index >= children.length) {
+            return {
+              content: [{ type: "text" as const, text: `Error: child source_index ${source_index} out of range (${children.length} children in parent ${parent_index})` }],
+              isError: true,
+            };
+          }
+          removed = children.splice(source_index, 1)[0];
+          remainingCount = children.length;
+          if (children.length === 0) {
+            delete parentSource.children;
+          }
+        } else {
+          if (source_index >= sources.length) {
+            return {
+              content: [{ type: "text" as const, text: `Error: source index ${source_index} out of range (${sources.length} sources${section ? ` in ${section}` : ""})` }],
+              isError: true,
+            };
+          }
+          removed = sources.splice(source_index, 1)[0];
+          remainingCount = sources.length;
+        }
+
+        // For Mechanism (flat array), set controller directly
+        if (config.sourcesPath === null && !config.sections) {
+          tab.controller = sources;
+        }
+
         writeLayout(file_path, layout);
 
         return {
@@ -1157,10 +1386,12 @@ export function createServer(): McpServer {
               removed: {
                 hub: hi,
                 tabIndex: tab_index,
+                ...(section ? { section } : {}),
+                ...(parent_index !== undefined ? { parentIndex: parent_index } : {}),
                 sourceIndex: source_index,
                 source: removed,
               },
-              remainingSources: sources.length,
+              remainingSources: remainingCount,
             }, null, 2),
           }],
         };
