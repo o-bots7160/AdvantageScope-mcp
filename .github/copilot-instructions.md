@@ -238,9 +238,12 @@ AdvantageScope visualizes telemetry data published via NetworkTables 4 (NT4). Co
 
 ## Releasing
 
+After pushing a new feature or bug fix that changes runtime behavior (source code in `src/`, dependency changes, etc.), create a release to publish to npm. Do **not** release for documentation-only changes (README, copilot-instructions, comments).
+
 ```bash
-npm version patch    # or minor/major — bumps version + creates git tag
+npm version patch    # or minor/major — bumps package.json and creates a git tag
 git push && git push --tags
-gh release create v<version> --generate-notes
-# GitHub Actions builds and publishes to npm
+gh release create v$(node -p "require('./package.json').version") --generate-notes
 ```
+
+The `publish.yml` workflow will automatically build, test, and publish the package to npm on release.
