@@ -21,6 +21,14 @@ import {
   validatePreferences,
 } from "./schema/validation.js";
 import {
+  TAB_SOURCE_CONFIGS,
+  SIMPLE_TAB_SCHEMAS,
+  SOURCE_LIST_TAB_TYPES,
+  validateSourceItem,
+  validateParentChild,
+  type SourceListItemState,
+} from "./schema/source-types.js";
+import {
   Config2dFieldSchema,
   Config3dFieldSchema,
   Config3dRobotSchema,
@@ -148,11 +156,13 @@ export function createServer(): McpServer {
           description: "Static documentation/welcome tab",
           dataTypes: [],
           visualizationTypes: [],
+          configuration: {},
+          notes: [],
         },
         {
           id: 1, name: "Line Graph",
           controllerType: "SourceListState",
-          description: "Time-series line charts for numeric and discrete data",
+          description: "Time-series line charts for numeric and discrete data. Supports integration, differentiation, and real-time alerts.",
           dataTypes: ["Number", "Raw", "Boolean", "String", "BooleanArray", "NumberArray", "StringArray", "Alerts"],
           visualizationTypes: [
             { type: "stepped", description: "Stepped line", sources: ["Number"], options: { color: "GraphColors", size: "normal|bold|verybold" } },
@@ -162,11 +172,17 @@ export function createServer(): McpServer {
             { type: "graph", description: "Discrete graph", sources: ["Raw", "Boolean", "Number", "String", "BooleanArray", "NumberArray", "StringArray"], options: { color: "GraphColors" } },
             { type: "alerts", description: "Alert display", sources: ["Alerts"], options: {} },
           ],
+          configuration: {},
+          notes: [
+            "GraphColors: orange, yellow, green, blue, purple, brown, red, white, black",
+            "Supports left and right Y-axis locking and zoom/pan",
+            "Numeric sources support integration and differentiation transforms",
+          ],
         },
         {
           id: 2, name: "2D Field",
           controllerType: "SourceListState",
-          description: "2D field visualization with robot poses, trajectories, and heatmaps",
+          description: "2D field visualization with robot poses, trajectories, and heatmaps overlayed on a field map",
           dataTypes: ["Pose2d", "Pose3d", "Transform2d", "Transform3d", "Translation2d", "Translation3d", "Rotation2d", "Rotation3d", "SwerveModuleState[]", "Trajectory", "DifferentialSample[]", "SwerveSample[]"],
           visualizationTypes: [
             { type: "robot", description: "Robot pose", sources: ["Pose2d", "Pose3d", "Pose2d[]", "Pose3d[]", "Transform2d", "Transform3d"], options: { bumpers: "alliance color or NeonColors" } },
@@ -177,6 +193,16 @@ export function createServer(): McpServer {
             { type: "arrow", description: "Direction arrow", sources: ["Pose2d", "Pose3d", "Trajectory"], options: { position: "center|back|front" } },
             { type: "swerveStates", description: "Swerve module vectors (child of robot)", sources: ["SwerveModuleState[]"], options: { color: "NeonColors", arrangement: "FL/FR/BL/BR permutations" } },
             { type: "rotationOverride", description: "Rotation override (child of robot)", sources: ["Rotation2d", "Rotation3d"], options: {} },
+          ],
+          configuration: {
+            field: "Field image to use (all recent FRC and FTC games supported, or custom asset)",
+            orientation: "Field image orientation in the viewer",
+            size: "Robot side length: 30 inches, 27 inches, or 24 inches",
+          },
+          notes: [
+            "Coordinate system is customizable via preferences (automatic, wall-alliance, wall-blue, center-rotated, center-red)",
+            "Data should be published as byte-encoded struct or protobuf (legacy number arrays are deprecated)",
+            "Some object types (vision, swerveStates, rotationOverride) must be added as children of a robot object",
           ],
         },
         {
@@ -195,6 +221,16 @@ export function createServer(): McpServer {
             { type: "axes", description: "Coordinate axes", sources: ["Pose2d", "Pose3d"], options: {} },
             { type: "cameraOverride", description: "Camera position override", sources: ["Pose2d", "Pose3d"], options: {} },
           ],
+          configuration: {
+            field: "3D field model to use (all recent FRC and FTC games supported, or custom asset)",
+            renderingMode: "cinematic (shadows, reflections), standard, or low-power",
+          },
+          notes: [
+            "Rendering mode can be overridden for battery power via field3dModeBattery preference",
+            "Camera modes: orbit field, orbit robot, driver station, fixed camera",
+            "Supports antialiasing toggle via field3dAntialiasing preference",
+            "Component models in robot assets are named model_0.glb, model_1.glb, etc.",
+          ],
         },
         {
           id: 4, name: "Table",
@@ -202,24 +238,43 @@ export function createServer(): McpServer {
           description: "Tabular view of value changes over time. Controller is an array of log field keys.",
           dataTypes: ["all types supported"],
           visualizationTypes: [],
+          configuration: {},
+          notes: [
+            "Shows one row per value change (no duplicates)",
+            "Click a row to select that timestamp (syncs across all tabs)",
+          ],
         },
         {
           id: 5, name: "Console",
           controllerType: "string | null",
-          description: "Console message viewer with warning/error highlighting. Controller is a single log field key.",
+          description: "Console message viewer with warning/error highlighting, text filtering (supports ! exclusion), and text export.",
           dataTypes: ["String"],
           visualizationTypes: [],
+          configuration: {},
+          notes: [
+            "Common fields: DSEvents, messages, /RealOutputs/Console, /ReplayOutputs/Console",
+            "Filter supports ! prefix for exclusion (e.g., '!debug' hides debug messages)",
+            "Warnings and errors are automatically highlighted",
+            "Log content can be exported to a text file",
+          ],
         },
         {
           id: 6, name: "Statistics",
           controllerType: "SourceListState",
-          description: "Statistical analysis with histograms (mean, median, std dev, percentiles)",
+          description: "Statistical analysis with histograms (mean, median, std dev, percentiles, skewness)",
           dataTypes: ["Number"],
           visualizationTypes: [
             { type: "independent", description: "Independent measurement", sources: ["Number"], options: { color: "GraphColors" } },
             { type: "reference", description: "Reference measurement (parent)", sources: ["Number"], options: {} },
             { type: "relativeError", description: "Relative error (child of reference)", sources: ["Number"], options: { color: "GraphColors" } },
             { type: "absoluteError", description: "Absolute error (child of reference)", sources: ["Number"], options: { color: "GraphColors" } },
+          ],
+          configuration: {
+            timeRange: "Visible Range, Full Log, Enabled, Auto, Teleop, Teleop (No Endgame), Live: 30s, Live: 10s",
+          },
+          notes: [
+            "Relative/absolute error sources must be children of a reference source",
+            "Displays histogram, mean, median, standard deviation, percentiles, and skewness",
           ],
         },
         {
@@ -228,43 +283,85 @@ export function createServer(): McpServer {
           description: "Synchronized match video playback (local file, YouTube, or The Blue Alliance)",
           dataTypes: [],
           visualizationTypes: [],
+          configuration: {
+            source: "Local file path, YouTube URL, or The Blue Alliance match key",
+          },
+          notes: [
+            "YouTube source requires a direct video URL",
+            "The Blue Alliance source requires tbaApiKey in preferences",
+            "Local file requires FFmpeg to be installed on the system",
+            "Video is synchronized to the log timeline",
+          ],
         },
         {
           id: 8, name: "Joysticks",
           controllerType: "string[]",
-          description: "Display up to 6 controller states. Controller is an array of 6 joystick layout names.",
+          description: "Display up to 6 controller states with button/axis visualization. Controller is an array of 6 joystick layout names.",
           dataTypes: ["Joystick data (from WPILib/AdvantageKit logs)"],
           visualizationTypes: [],
+          configuration: {},
+          notes: [
+            "Joystick IDs range from 0 to 5, matching Driver Station and WPILib IDs",
+            "WARNING: Joystick data is NOT available via a plain NetworkTables connection with stock WPILib",
+            "Requires: WPILib log with joystick logging enabled, AdvantageKit logs, or AdvantageKit streaming",
+            "Built-in layouts include Xbox Controller, PS4/PS5 Controller, and Generic Joystick (grid format)",
+            "Custom joystick layouts can be added via custom assets (Joystick_{Name}/config.json)",
+          ],
         },
         {
           id: 9, name: "Swerve",
           controllerType: "SourceListState",
-          description: "Swerve drive module vector display with velocity and rotation visualization",
+          description: "Swerve drive module vector display showing velocity vectors, idle positions, robot rotation, and chassis speeds",
           dataTypes: ["SwerveModuleState[]", "ChassisSpeeds", "Rotation2d", "Rotation3d"],
           visualizationTypes: [
             { type: "states", description: "Module states (velocity vectors)", sources: ["SwerveModuleState[]"], options: { color: "NeonColors", arrangement: "FL/FR/BL/BR|FR/FL/BR/BL|etc." } },
-            { type: "chassisSpeeds", description: "Chassis speeds vector", sources: ["ChassisSpeeds"], options: { color: "NeonColors" } },
-            { type: "rotation", description: "Robot rotation indicator", sources: ["Rotation2d", "Rotation3d"], options: {} },
+            { type: "chassisSpeeds", description: "Chassis speeds vector (displayed in center)", sources: ["ChassisSpeeds"], options: { color: "NeonColors" } },
+            { type: "rotation", description: "Robot rotation indicator (rotates the diagram)", sources: ["Rotation2d", "Rotation3d"], options: {} },
+          ],
+          configuration: {
+            maxSpeed: "Maximum achievable module speed (adjusts vector sizing)",
+            frameSize: "Distances between left-right and front-back modules (changes robot diagram aspect ratio)",
+            orientation: "Direction the robot diagram is pointed (useful to align with pose data or match videos)",
+          },
+          notes: [
+            "Data must be published as byte-encoded struct or protobuf (legacy number arrays are deprecated)",
+            "SwerveModuleState[] requires exactly 4 module states",
           ],
         },
         {
           id: 10, name: "Mechanism",
           controllerType: "SourceListState",
-          description: "WPILib Mechanism2d visualization (jointed mechanisms like arms, elevators)",
+          description: "WPILib Mechanism2d visualization for jointed mechanisms (arms, elevators, wrists, intakes)",
           dataTypes: ["Mechanism2d"],
           visualizationTypes: [
             { type: "mechanism", description: "Mechanism2d field", sources: ["Mechanism2d"], options: {} },
+          ],
+          configuration: {},
+          notes: [
+            "Publish via SmartDashboard.putData('MyMech', mechanism) or Logger.recordOutput('MyMech', mechanism)",
+            "Mechanism2d must be recorded every loop cycle as it captures current state only",
+            "Supports multiple mechanisms displayed simultaneously",
           ],
         },
         {
           id: 11, name: "Points",
           controllerType: "SourceListState",
-          description: "2D scatter plot visualization for arbitrary point data",
+          description: "2D scatter plot visualization for arbitrary point data (vision pipelines, mechanism states, custom visualizations)",
           dataTypes: ["Translation2d", "Translation2d[]", "NumberArray"],
           visualizationTypes: [
             { type: "plus", description: "Plus marker", sources: ["Translation2d", "Translation2d[]", "NumberArray"], options: { size: "small|medium|large", groupSize: "0-9" } },
             { type: "cross", description: "Cross marker", sources: ["Translation2d", "Translation2d[]", "NumberArray"], options: { size: "small|medium|large", groupSize: "0-9" } },
             { type: "circle", description: "Circle marker", sources: ["Translation2d", "Translation2d[]", "NumberArray"], options: { size: "small|medium|large", groupSize: "0-9" } },
+          ],
+          configuration: {
+            dimensions: "Size of the display area (use units matching published points; for vision data, use camera resolution)",
+            orientation: "Coordinate system (orientation of X and Y axes)",
+            origin: "Position of the origin in the coordinate system",
+          },
+          notes: [
+            "Data should be published as byte-encoded struct (Translation2d[])",
+            "Symbol, color, and size can be customized per source",
+            "Very flexible — use for custom visualizations of vision data, mechanism states, etc.",
           ],
         },
         {
@@ -273,10 +370,82 @@ export function createServer(): McpServer {
           description: "Display log metadata key-value pairs. Supports side-by-side real vs replay comparison.",
           dataTypes: ["String metadata (/Metadata table or Logger.recordMetadata)"],
           visualizationTypes: [],
+          configuration: {},
+          notes: [
+            "Data source: /Metadata table (NetworkTables or DataLog) or Logger.recordMetadata() (AdvantageKit)",
+            "Useful for recording build info, Git commit hashes, configuration parameters, etc.",
+          ],
         },
       ];
       return {
         content: [{ type: "text" as const, text: JSON.stringify(tabTypeInfo, null, 2) }],
+      };
+    },
+  );
+
+  server.tool(
+    "get_tab_type_schema",
+    "Get the full schema for a specific AdvantageScope tab type, including controller format, valid source types with options, parent/child relationships, and WPILib code hints for publishing data",
+    {
+      tab_type: z.number().int().min(0).max(12).describe("Tab type ID (0=Documentation, 1=LineGraph, 2=Field2d, 3=Field3d, 4=Table, 5=Console, 6=Statistics, 7=Video, 8=Joysticks, 9=Swerve, 10=Mechanism, 11=Points, 12=Metadata)"),
+    },
+    async ({ tab_type }) => {
+      // Check if it's a SourceListState tab
+      const sourceConfig = TAB_SOURCE_CONFIGS.get(tab_type);
+      if (sourceConfig) {
+        const schema = {
+          tabType: sourceConfig.tabType,
+          tabName: sourceConfig.tabName,
+          controllerFormat: "SourceListState (array of SourceListItemState objects)",
+          sectionTitle: sourceConfig.sectionTitle,
+          sourceItemFormat: {
+            type: "string — visualization type key (see 'types' below)",
+            logKey: "string — log field path (e.g., '/RealOutputs/Drive/Pose')",
+            logType: "string — data type (must match one of the sourceTypes for the chosen type)",
+            visible: "boolean — whether this source is shown",
+            options: "object — key/value pairs (see type-specific options below)",
+          },
+          types: sourceConfig.types.map((t) => ({
+            key: t.key,
+            display: t.display,
+            sourceTypes: t.sourceTypes,
+            options: t.options.map((o) => ({
+              key: o.key,
+              display: o.display,
+              values: o.values,
+            })),
+            ...(t.childOf ? { childOf: t.childOf, note: `Must be added as child of a '${t.childOf}' parent source` } : {}),
+            ...(t.parentKey ? { parentKey: t.parentKey, note: "Can have child sources attached" } : {}),
+          })),
+          wpilibHints: sourceConfig.wpilibHints,
+          supportsSourceManagement: true,
+          note: "Use add_source, update_source, remove_source tools to manage sources on this tab type.",
+        };
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(schema, null, 2) }],
+        };
+      }
+
+      // Check simple tab schemas
+      const simpleConfig = SIMPLE_TAB_SCHEMAS.get(tab_type);
+      if (simpleConfig) {
+        const schema = {
+          tabType: simpleConfig.tabType,
+          tabName: simpleConfig.tabName,
+          controllerFormat: simpleConfig.controllerFormat,
+          description: simpleConfig.description,
+          wpilibHints: simpleConfig.wpilibHints,
+          supportsSourceManagement: false,
+          note: "This tab type does not use SourceListState. Use add_tab/update_tab with the controller format described above.",
+        };
+        return {
+          content: [{ type: "text" as const, text: JSON.stringify(schema, null, 2) }],
+        };
+      }
+
+      return {
+        content: [{ type: "text" as const, text: `Error: Unknown tab type ${tab_type}` }],
+        isError: true,
       };
     },
   );
@@ -740,6 +909,258 @@ export function createServer(): McpServer {
                 title: removed.title,
               },
               remainingTabs: tabs.tabs.length,
+            }, null, 2),
+          }],
+        };
+      } catch (e) {
+        return {
+          content: [{ type: "text" as const, text: `Error: ${(e as Error).message}` }],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  // ─── SOURCE MANAGEMENT TOOLS ─────────────────────────────────────
+
+  server.tool(
+    "add_source",
+    "Add a data source to a SourceListState tab (LineGraph, Field2d, Field3d, Statistics, Swerve, Mechanism, Points). Validates type, logType, and options against AdvantageScope's actual schema.",
+    {
+      file_path: z.string().describe("Path to the layout state JSON file"),
+      hub_index: z.number().int().min(0).optional().describe("Hub (window) index (default: 0)"),
+      tab_index: z.number().int().min(0).describe("Tab index within the hub"),
+      type: z.string().describe("Visualization type key (e.g., 'stepped', 'robot', 'states'). Use get_tab_type_schema to see valid types."),
+      log_key: z.string().describe("Log field path (e.g., '/RealOutputs/Drive/Pose')"),
+      log_type: z.string().describe("Data type string (e.g., 'Number', 'Pose2d', 'SwerveModuleState[]'). Must match one of the sourceTypes for the chosen type."),
+      visible: z.boolean().optional().describe("Whether this source is visible (default: true)"),
+      options: z.record(z.string(), z.string()).optional().describe("Type-specific display options (e.g., {color: 'orange', size: 'bold'})"),
+    },
+    async ({ file_path, hub_index, tab_index, type, log_key, log_type, visible, options }) => {
+      try {
+        const layout = readLayout(file_path);
+        const hi = hub_index ?? 0;
+        if (hi >= layout.hubs.length) {
+          return {
+            content: [{ type: "text" as const, text: `Error: hub index ${hi} out of range (${layout.hubs.length} hubs)` }],
+            isError: true,
+          };
+        }
+        const tab = layout.hubs[hi].state.tabs.tabs[tab_index];
+        if (!tab) {
+          return {
+            content: [{ type: "text" as const, text: `Error: tab index ${tab_index} out of range` }],
+            isError: true,
+          };
+        }
+
+        if (!SOURCE_LIST_TAB_TYPES.has(tab.type)) {
+          const tabName = TAB_TYPE_NAMES[tab.type as TabType] ?? `Unknown(${tab.type})`;
+          return {
+            content: [{ type: "text" as const, text: `Error: Tab type "${tabName}" (${tab.type}) does not use SourceListState controller. Use update_tab for this tab type.` }],
+            isError: true,
+          };
+        }
+
+        const newSource: SourceListItemState = {
+          type,
+          logKey: log_key,
+          logType: log_type,
+          visible: visible ?? true,
+          options: options ?? {},
+        };
+
+        // Validate the source against the tab's schema
+        const errors = validateSourceItem(tab.type, newSource);
+        if (errors.length > 0) {
+          return {
+            content: [{ type: "text" as const, text: `Validation errors:\n${errors.join("\n")}` }],
+            isError: true,
+          };
+        }
+
+        // Validate parent/child relationship
+        const existingSources = (Array.isArray(tab.controller) ? tab.controller : []) as SourceListItemState[];
+        const parentError = validateParentChild(tab.type, existingSources, type);
+        if (parentError) {
+          return {
+            content: [{ type: "text" as const, text: `Warning: ${parentError}` }],
+            isError: true,
+          };
+        }
+
+        // Add the source
+        if (!Array.isArray(tab.controller)) {
+          tab.controller = [];
+        }
+        (tab.controller as SourceListItemState[]).push(newSource);
+        writeLayout(file_path, layout);
+
+        const sourceIndex = (tab.controller as SourceListItemState[]).length - 1;
+        return {
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify({
+              added: {
+                hub: hi,
+                tabIndex: tab_index,
+                sourceIndex,
+                source: newSource,
+              },
+            }, null, 2),
+          }],
+        };
+      } catch (e) {
+        return {
+          content: [{ type: "text" as const, text: `Error: ${(e as Error).message}` }],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  server.tool(
+    "update_source",
+    "Update an existing data source in a SourceListState tab by index. Can change type, logKey, logType, visibility, and options.",
+    {
+      file_path: z.string().describe("Path to the layout state JSON file"),
+      hub_index: z.number().int().min(0).optional().describe("Hub (window) index (default: 0)"),
+      tab_index: z.number().int().min(0).describe("Tab index within the hub"),
+      source_index: z.number().int().min(0).describe("Source index within the tab's source list"),
+      type: z.string().optional().describe("New visualization type key"),
+      log_key: z.string().optional().describe("New log field path"),
+      log_type: z.string().optional().describe("New data type string"),
+      visible: z.boolean().optional().describe("New visibility state"),
+      options: z.record(z.string(), z.string()).optional().describe("Options to merge into existing options"),
+    },
+    async ({ file_path, hub_index, tab_index, source_index, type, log_key, log_type, visible, options }) => {
+      try {
+        const layout = readLayout(file_path);
+        const hi = hub_index ?? 0;
+        if (hi >= layout.hubs.length) {
+          return {
+            content: [{ type: "text" as const, text: `Error: hub index ${hi} out of range (${layout.hubs.length} hubs)` }],
+            isError: true,
+          };
+        }
+        const tab = layout.hubs[hi].state.tabs.tabs[tab_index];
+        if (!tab) {
+          return {
+            content: [{ type: "text" as const, text: `Error: tab index ${tab_index} out of range` }],
+            isError: true,
+          };
+        }
+
+        if (!SOURCE_LIST_TAB_TYPES.has(tab.type)) {
+          return {
+            content: [{ type: "text" as const, text: `Error: Tab type ${tab.type} does not use SourceListState controller` }],
+            isError: true,
+          };
+        }
+
+        const sources = tab.controller as SourceListItemState[];
+        if (!Array.isArray(sources) || source_index >= sources.length) {
+          return {
+            content: [{ type: "text" as const, text: `Error: source index ${source_index} out of range (${Array.isArray(sources) ? sources.length : 0} sources)` }],
+            isError: true,
+          };
+        }
+
+        const source = sources[source_index];
+        if (type !== undefined) source.type = type;
+        if (log_key !== undefined) source.logKey = log_key;
+        if (log_type !== undefined) source.logType = log_type;
+        if (visible !== undefined) source.visible = visible;
+        if (options !== undefined) source.options = { ...source.options, ...options };
+
+        // Validate the updated source
+        const errors = validateSourceItem(tab.type, source);
+        if (errors.length > 0) {
+          return {
+            content: [{ type: "text" as const, text: `Validation errors:\n${errors.join("\n")}` }],
+            isError: true,
+          };
+        }
+
+        writeLayout(file_path, layout);
+        return {
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify({
+              updated: {
+                hub: hi,
+                tabIndex: tab_index,
+                sourceIndex: source_index,
+                source,
+              },
+            }, null, 2),
+          }],
+        };
+      } catch (e) {
+        return {
+          content: [{ type: "text" as const, text: `Error: ${(e as Error).message}` }],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  server.tool(
+    "remove_source",
+    "Remove a data source from a SourceListState tab by index",
+    {
+      file_path: z.string().describe("Path to the layout state JSON file"),
+      hub_index: z.number().int().min(0).optional().describe("Hub (window) index (default: 0)"),
+      tab_index: z.number().int().min(0).describe("Tab index within the hub"),
+      source_index: z.number().int().min(0).describe("Source index to remove"),
+    },
+    async ({ file_path, hub_index, tab_index, source_index }) => {
+      try {
+        const layout = readLayout(file_path);
+        const hi = hub_index ?? 0;
+        if (hi >= layout.hubs.length) {
+          return {
+            content: [{ type: "text" as const, text: `Error: hub index ${hi} out of range (${layout.hubs.length} hubs)` }],
+            isError: true,
+          };
+        }
+        const tab = layout.hubs[hi].state.tabs.tabs[tab_index];
+        if (!tab) {
+          return {
+            content: [{ type: "text" as const, text: `Error: tab index ${tab_index} out of range` }],
+            isError: true,
+          };
+        }
+
+        if (!SOURCE_LIST_TAB_TYPES.has(tab.type)) {
+          return {
+            content: [{ type: "text" as const, text: `Error: Tab type ${tab.type} does not use SourceListState controller` }],
+            isError: true,
+          };
+        }
+
+        const sources = tab.controller as SourceListItemState[];
+        if (!Array.isArray(sources) || source_index >= sources.length) {
+          return {
+            content: [{ type: "text" as const, text: `Error: source index ${source_index} out of range (${Array.isArray(sources) ? sources.length : 0} sources)` }],
+            isError: true,
+          };
+        }
+
+        const removed = sources.splice(source_index, 1)[0];
+        writeLayout(file_path, layout);
+
+        return {
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify({
+              removed: {
+                hub: hi,
+                tabIndex: tab_index,
+                sourceIndex: source_index,
+                source: removed,
+              },
+              remainingSources: sources.length,
             }, null, 2),
           }],
         };

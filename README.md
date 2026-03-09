@@ -6,6 +6,8 @@ An MCP (Model Context Protocol) server for creating, reading, modifying, and val
 
 - **Custom asset management** — create and validate 2D fields, 3D fields, robot models, and joystick configs
 - **Layout editing** — create, modify, and manage AdvantageScope window/tab state files
+- **Source management** — add, update, and remove data sources on SourceListState tabs with full validation of types, logTypes, options, and parent/child relationships
+- **Tab type discovery** — query detailed schemas for each tab type including WPILib code hints for publishing data
 - **Preferences management** — read and update AdvantageScope preferences with validation
 - **Schema validation** — validate any asset config against its Zod schema before saving
 
@@ -50,7 +52,8 @@ Add to your `.vscode/mcp.json`:
 - **`list_assets`** — List AdvantageScope custom asset directories, optionally filtered by type
 - **`get_asset_config`** — Read an asset's config.json with auto-detected asset type
 - **`validate_asset_config`** — Validate an asset config.json against its schema
-- **`list_tab_types`** — List all AdvantageScope tab types with numeric IDs
+- **`list_tab_types`** — List all AdvantageScope tab types with IDs, data types, visualization options, configuration, and notes
+- **`get_tab_type_schema`** — Get full schema for a tab type: controller format, valid source types, options, parent/child relationships, and WPILib code hints
 - **`get_layout`** — Read a layout state JSON file and get a summary of hubs and tabs
 - **`get_tab`** — Get full details of a specific tab including controller and renderer config
 - **`get_preferences`** — Read AdvantageScope preferences (returns defaults for missing fields)
@@ -69,6 +72,12 @@ Add to your `.vscode/mcp.json`:
 - **`update_preferences`** — Update AdvantageScope preferences (merges with existing)
 - **`update_tab`** — Update an existing tab's title, controller, and/or renderer config
 - **`add_tab`** — Add a tab to an existing layout by type ID with optional controller/renderer config
+- **`add_source`** — Add a validated data source to a SourceListState tab (LineGraph, Field2d/3d, Statistics, Swerve, Mechanism, Points)
+- **`update_source`** — Update an existing source in a SourceListState tab by index
+- **`remove_source`** — Remove a source from a SourceListState tab by index
+
+### Delete
+
 - **`remove_tab`** — Remove a tab from a layout by index
 
 ## Development

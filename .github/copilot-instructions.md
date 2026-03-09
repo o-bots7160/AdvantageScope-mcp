@@ -33,6 +33,7 @@ The server uses `@modelcontextprotocol/sdk` with stdio transport, identical to e
 - **`src/schema/types.ts`** — TypeScript interfaces for all AdvantageScope config types (Config2dField, Config3dField, Config3dRobot, ConfigJoystick, ApplicationState, Preferences, TabType enum).
 - **`src/schema/schemas.ts`** — Zod schemas matching each TypeScript interface, used for both MCP tool input validation and config file validation.
 - **`src/schema/validation.ts`** — Validation functions that return `ValidationError[]` arrays.
+- **`src/schema/source-types.ts`** — Source type configurations for all SourceListState tabs, derived from AdvantageScope's actual `*_Config.ts` files. Includes valid type keys, sourceTypes, options with allowed values, parent/child relationships, WPILib code hints, and validation functions.
 - **`src/tools/assets.ts`** — File I/O for asset config.json files (read, write, list, infer type from directory name).
 - **`src/tools/layout.ts`** — File I/O for layout state files and preferences (read, write, create empty layouts/tabs).
 - **`src/utils/`** — Shared utility functions.
@@ -69,13 +70,14 @@ Key conventions:
 - Return JSON as formatted text content (`JSON.stringify(result, null, 2)`)
 - Tool names use `snake_case`
 
-### Implemented Tools (16 total)
+### Implemented Tools (20 total)
 
 **Read/Inspect:**
 - `list_assets` — List AdvantageScope custom asset directories within a base directory, optionally filtered by type
 - `get_asset_config` — Read an asset's config.json and return contents with auto-detected asset type
 - `validate_asset_config` — Validate an asset config.json against its Zod schema
-- `list_tab_types` — List all AdvantageScope tab types with numeric IDs
+- `list_tab_types` — List all AdvantageScope tab types with numeric IDs, data types, visualization types, configuration, and notes
+- `get_tab_type_schema` — Get the full schema for a specific tab type including controller format, valid source types with options, parent/child relationships, and WPILib code hints
 - `get_layout` — Read an AdvantageScope layout state JSON file and return a summary of hubs and tabs
 - `get_tab` — Get full details of a specific tab including controller and renderer config
 - `get_preferences` — Read AdvantageScope preferences from a prefs.json file (returns defaults for missing fields)
@@ -92,6 +94,9 @@ Key conventions:
 - `update_asset_config` — Merge updates into an existing asset config.json with validation
 - `update_preferences` — Update AdvantageScope preferences (merges with existing, validates before saving)
 - `update_tab` — Update an existing tab's title, controller, and/or renderer config (shallow-merges with existing)
+- `add_source` — Add a validated data source to a SourceListState tab (validates type, logType, options, and parent/child relationships)
+- `update_source` — Update an existing source in a SourceListState tab by index with validation
+- `remove_source` — Remove a source from a SourceListState tab by index
 
 **Delete:**
 - `remove_tab` — Remove a tab from a layout by index (auto-adjusts selected tab)
@@ -286,6 +291,20 @@ AdvantageScope saves window/tab state to `~/.advantagescope/state-{version}.json
 ### Tab Types and Controller State
 
 Each tab's `controller` field contains tab-specific configuration. The format varies significantly by tab type.
+
+**Source management tools** (`add_source`, `update_source`, `remove_source`) handle SourceListState tabs with full validation. Use `get_tab_type_schema` to query the exact schema for any tab type, including valid source types, options, and WPILib code hints.
+
+#### Data Type Resolution
+
+AdvantageScope has 8 fundamental `LoggableType` values: `Raw`, `Boolean`, `Number`, `String`, `BooleanArray`, `NumberArray`, `StringArray`, `Empty`.
+
+**All numeric types (int8-64, uint8-64, float, float32, double, float64) are treated as a single `Number` type.** There is no int/float/double distinction in the logType field.
+
+Structured types (e.g., `Pose2d`, `SwerveModuleState[]`, `ChassisSpeeds`) are resolved from WPILib struct descriptors and take priority over the base LoggableType. The `logType` field in SourceListItemState stores the resolved type string.
+
+**Type resolution priority:**
+1. Structured type (`"Pose2d"`, `"ChassisSpeeds"`, `"SwerveModuleState[]"`) — from struct decoder
+2. LoggableType string (`"Number"`, `"NumberArray"`, `"Boolean"`) — fallback
 
 #### SourceListState (used by most visualization tabs)
 
