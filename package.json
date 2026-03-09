@@ -1,6 +1,6 @@
 {
   "name": "@o-bots7160/advantagescope-mcp",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "MCP server for creating and editing AdvantageScope configuration JSON files",
   "main": "dist/index.js",
   "bin": {
